@@ -1,0 +1,36 @@
+name: Daily Wiki Quiz
+
+on:
+  schedule:
+    # 매일 00:00 UTC (KST 09:00) — cron은 UTC 고정, 고부하 시간대엔 지연/스킵 가능
+    - cron: "0 0 * * *"
+  workflow_dispatch: {}   # 수동 실행용
+
+jobs:
+  generate-quiz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily quiz pipeline
+        env:
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          NOTION_ROOT_PAGE_ID: ${{ secrets.NOTION_ROOT_PAGE_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          QUIZ_MODEL: ${{ vars.QUIZ_MODEL }}
+          DELIVERY_MODE: ${{ vars.DELIVERY_MODE }}
+          NOTION_QUIZ_LOG_PARENT_PAGE_ID: ${{ secrets.NOTION_QUIZ_LOG_PARENT_PAGE_ID }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python -m src.notion_quiz.main
