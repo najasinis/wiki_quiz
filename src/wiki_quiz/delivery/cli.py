@@ -1,6 +1,6 @@
 """5-C. CLI 출력 — 가장 빠른 전달 방식, 전달 계층 없이 터미널에 바로 출력."""
 
-from notion_quiz.quiz_generator import QuizQuestion
+from wiki_quiz.quiz_generator import QuizQuestion
 
 
 def deliver(questions: list[QuizQuestion]) -> None:

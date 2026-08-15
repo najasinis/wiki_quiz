@@ -1,5 +1,6 @@
-# Notion API 클라이언트
-notion-client>=2.2.1
+# 요구 사항: Python >= 3.10 (코드 전체에서 `X | None` 문법(PEP 604) 사용).
+# macOS 기본 `python3`는 버전이 낮을 수 있으니 `python3 --version`으로 먼저 확인할 것.
+# (레포 루트의 `.python-version` 참고 — pyenv 사용 시 자동으로 3.12를 잡아준다)
 
 # Claude API
 anthropic>=0.40.0

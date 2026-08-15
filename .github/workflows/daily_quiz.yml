@@ -21,16 +21,20 @@ jobs:
 
       - name: Run daily quiz pipeline
         env:
-          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
-          NOTION_ROOT_PAGE_ID: ${{ secrets.NOTION_ROOT_PAGE_ID }}
+          # src/ 내부 모듈이 `wiki_quiz.xxx` 절대 임포트를 쓰므로 src/를 PYTHONPATH에 추가해야
+          # `python -m src.wiki_quiz.main` 실행 시 ModuleNotFoundError가 나지 않는다.
+          PYTHONPATH: ${{ github.workspace }}/src
+          OUTLINE_API_URL: ${{ vars.OUTLINE_API_URL }}
+          OUTLINE_API_KEY: ${{ secrets.OUTLINE_API_KEY }}
+          OUTLINE_ROOT_COLLECTION_ID: ${{ secrets.OUTLINE_ROOT_COLLECTION_ID }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           QUIZ_MODEL: ${{ vars.QUIZ_MODEL }}
           DELIVERY_MODE: ${{ vars.DELIVERY_MODE }}
-          NOTION_QUIZ_LOG_PARENT_PAGE_ID: ${{ secrets.NOTION_QUIZ_LOG_PARENT_PAGE_ID }}
+          OUTLINE_QUIZ_LOG_COLLECTION_ID: ${{ secrets.OUTLINE_QUIZ_LOG_COLLECTION_ID }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
-        run: python -m src.notion_quiz.main
+        run: python -m src.wiki_quiz.main
