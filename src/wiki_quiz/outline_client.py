@@ -52,6 +52,23 @@ class WikiDocument:
     attachment_urls: list[str] = field(default_factory=list)  # 본문 안에 임베드된 첨부파일 링크
 
 
+def _raise_with_body(resp: httpx.Response) -> None:
+    """4xx/5xx 응답 시 Outline이 돌려주는 {"ok": false, "error": "..."} 본문을
+    예외 메시지에 포함시켜, 로그만 보고도 원인(잘못된 파라미터 등)을 바로 알 수 있게 한다.
+    """
+    if resp.is_success:
+        return
+    try:
+        detail = resp.json()
+    except ValueError:
+        detail = resp.text
+    raise httpx.HTTPStatusError(
+        f"{resp.status_code} {resp.reason_phrase} for url '{resp.url}': {detail!r}",
+        request=resp.request,
+        response=resp,
+    )
+
+
 def _is_rate_limited(exc: BaseException) -> bool:
     """429(Too Many Requests) 응답에 대해서만 재시도한다.
 
@@ -100,7 +117,9 @@ class OutlineWikiCrawler:
         info = self._fetch_document_info_with_backoff(root_document_id)
         root_doc = self._to_wiki_document(info)
         docs: list[WikiDocument] = [root_doc]
-        self._walk(parent_document_id=root_document_id, collection_id=root_doc.collection_id, acc=docs)
+        # root_document_id는 URL slug일 수 있어 documents.list가 거부할 수 있다(400).
+        # documents.info 응답의 실제 UUID(root_doc.document_id)를 대신 사용한다.
+        self._walk(parent_document_id=root_doc.document_id, collection_id=root_doc.collection_id, acc=docs)
         return docs
 
     def _walk(self, parent_document_id: str | None, collection_id: str, acc: list[WikiDocument]) -> None:
@@ -125,7 +144,7 @@ class OutlineWikiCrawler:
                     "limit": limit,
                 },
             )
-            resp.raise_for_status()
+            _raise_with_body(resp)
             payload = resp.json()
             data = payload.get("data", [])
             results.extend(data)
@@ -137,7 +156,7 @@ class OutlineWikiCrawler:
     @_outline_retry
     def _fetch_document_info_with_backoff(self, document_id: str) -> dict:
         resp = self._http.post("/documents.info", json={"id": document_id})
-        resp.raise_for_status()
+        _raise_with_body(resp)
         return resp.json()["data"]
 
     def _to_wiki_document(self, raw: dict) -> WikiDocument:
