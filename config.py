@@ -46,7 +46,10 @@ def load_config() -> Config:
             "OUTLINE_ROOT_COLLECTION_ID 또는 OUTLINE_DOCUMENT_ID 중 하나는 반드시 설정해야 합니다."
         )
 
-    quiz_provider = os.environ.get("QUIZ_PROVIDER", "gemini")
+    # `or "gemini"`: GitHub Actions에서 vars.QUIZ_PROVIDER 미설정 시 빈 문자열이 주입되는데,
+    # os.environ.get(key, default)는 키가 존재하면(빈 값이어도) default를 적용하지 않으므로
+    # 명시적으로 빈 문자열도 걸러낸다.
+    quiz_provider = os.environ.get("QUIZ_PROVIDER") or "gemini"
     anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
     gemini_api_key = os.environ.get("GEMINI_API_KEY")
     if quiz_provider == "claude" and not anthropic_api_key:
@@ -67,7 +70,9 @@ def load_config() -> Config:
         ),
         sample_chunk_count=int(os.environ.get("SAMPLE_CHUNK_COUNT", "15")),
         question_count=int(os.environ.get("QUESTION_COUNT", "3")),
-        delivery_mode=os.environ.get("DELIVERY_MODE", "cli"),
+        # QUIZ_PROVIDER와 같은 이유로 `or` 사용 — vars.DELIVERY_MODE 미설정 시 빈 문자열이
+        # 주입되면 os.environ.get(key, default)는 기본값을 적용하지 않는다.
+        delivery_mode=os.environ.get("DELIVERY_MODE") or "cli",
         outline_quiz_log_collection_id=os.environ.get("OUTLINE_QUIZ_LOG_COLLECTION_ID"),
         slack_webhook_url=os.environ.get("SLACK_WEBHOOK_URL"),
         smtp_host=os.environ.get("SMTP_HOST"),
