@@ -12,7 +12,10 @@ load_dotenv()
 class Config:
     outline_api_url: str
     outline_api_key: str
-    outline_root_collection_id: str
+    # 둘 중 하나는 반드시 있어야 한다: root_collection_id면 컬렉션 전체를,
+    # document_id면 그 문서(+하위 트리)만 순회한다. document_id가 우선한다.
+    outline_root_collection_id: str | None
+    outline_document_id: str | None
 
     anthropic_api_key: str
     quiz_model: str
@@ -34,10 +37,18 @@ class Config:
 
 def load_config() -> Config:
     # SUDO: 필수 값 누락 시 명시적으로 에러 던지기 (조용히 None으로 두지 않기)
+    root_collection_id = os.environ.get("OUTLINE_ROOT_COLLECTION_ID")
+    document_id = os.environ.get("OUTLINE_DOCUMENT_ID")
+    if not root_collection_id and not document_id:
+        raise KeyError(
+            "OUTLINE_ROOT_COLLECTION_ID 또는 OUTLINE_DOCUMENT_ID 중 하나는 반드시 설정해야 합니다."
+        )
+
     return Config(
         outline_api_url=os.environ["OUTLINE_API_URL"],
         outline_api_key=os.environ["OUTLINE_API_KEY"],
-        outline_root_collection_id=os.environ["OUTLINE_ROOT_COLLECTION_ID"],
+        outline_root_collection_id=root_collection_id,
+        outline_document_id=document_id,
         anthropic_api_key=os.environ["ANTHROPIC_API_KEY"],
         quiz_model=os.environ.get("QUIZ_MODEL", "claude-haiku-4-5"),
         sample_chunk_count=int(os.environ.get("SAMPLE_CHUNK_COUNT", "15")),

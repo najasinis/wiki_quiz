@@ -20,7 +20,11 @@ def run() -> None:
     cfg = load_config()
 
     with OutlineWikiCrawler(cfg.outline_api_url, cfg.outline_api_key) as crawler:
-        docs = crawler.collect_all_documents(cfg.outline_root_collection_id)
+        # OUTLINE_DOCUMENT_ID가 설정되어 있으면 그 문서(+하위 트리)만, 아니면 컬렉션 전체를 순회한다.
+        if cfg.outline_document_id:
+            docs = crawler.collect_document_tree(cfg.outline_document_id)
+        else:
+            docs = crawler.collect_all_documents(cfg.outline_root_collection_id)
 
     # NOTE: 첨부 URL이 인증 필요 프록시 URL인지 아직 미확인이라(README 참고),
     # Outline API 키를 Authorization 헤더로 함께 실어 보낸다 — 단, 보안상 다운로드

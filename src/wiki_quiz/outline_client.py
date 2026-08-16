@@ -92,6 +92,17 @@ class OutlineWikiCrawler:
         self._walk(parent_document_id=None, collection_id=root_collection_id, acc=docs)
         return docs
 
+    def collect_document_tree(self, root_document_id: str) -> list[WikiDocument]:
+        """단일 문서를 루트로, 그 문서와 하위 문서 트리만 수집한다.
+
+        컬렉션 전체가 아니라 지정된 문서 하나(+그 자식들)만 퀴즈 소스로 쓰고 싶을 때 사용.
+        """
+        info = self._fetch_document_info_with_backoff(root_document_id)
+        root_doc = self._to_wiki_document(info)
+        docs: list[WikiDocument] = [root_doc]
+        self._walk(parent_document_id=root_document_id, collection_id=root_doc.collection_id, acc=docs)
+        return docs
+
     def _walk(self, parent_document_id: str | None, collection_id: str, acc: list[WikiDocument]) -> None:
         for child in self._list_documents_with_backoff(collection_id, parent_document_id):
             info = self._fetch_document_info_with_backoff(child["id"])
