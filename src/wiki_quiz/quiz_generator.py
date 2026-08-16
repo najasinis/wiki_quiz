@@ -2,9 +2,11 @@
 4단계: LLM API로 퀴즈 3문제 생성
 
 두 provider를 지원한다 (QUIZ_PROVIDER 환경변수로 선택, 기본 "gemini"):
-- gemini: Google Gemini API. `gemini-2.0-flash` 등 무료 티어(분당/일당 요청 수 제한은
+- gemini: Google Gemini API. `gemini-3.5-flash-lite` 등 무료 티어(분당/일당 요청 수 제한은
   있지만 과금 없음)로 사용 가능해 기본값으로 삼았다. API 키는 https://aistudio.google.com
-  에서 발급.
+  에서 발급. Gemini는 모델 세대 교체·구버전 폐기가 잦으므로(예: gemini-2.0-flash는
+  2026-06-01 서비스 종료), QUIZ_MODEL로 지정한 모델이 404를 내면 Google AI Studio의
+  최신 모델 목록에서 후속 모델명으로 갱신할 것.
 - claude: Anthropic Claude API. 유료 종량제(Claude.ai Max 구독과는 별개 결제).
   품질이 더 필요하면 QUIZ_PROVIDER=claude 로 전환.
 

@@ -31,7 +31,8 @@ Outline API·LLM API를 모킹한 end-to-end 드라이런과 `pytest` 전체 스
 3. **랜덤 샘플링** — `sampler.py`: 문서/첨부 텍스트를 문단 단위로 모아 최대 500자
    청크로 쪼갠 뒤(`build_chunks`), 그중 무작위 표본을 추출(`sample_chunks`)해 토큰 비용 억제.
 4. **퀴즈 생성** — `quiz_generator.py`: `QUIZ_PROVIDER`로 LLM을 선택.
-   - `gemini`(기본값) — Gemini API, `gemini-2.0-flash`. 무료 티어로 사용 가능해 기본으로 삼음.
+   - `gemini`(기본값) — Gemini API, `gemini-3.5-flash-lite`. 무료 티어로 사용 가능해 기본으로 삼음
+     (Gemini는 구모델 폐기가 잦으니 404 발생 시 README "실제 연동 전 확인 필요" 참고).
    - `claude` — Claude API, Haiku 4.5 기본(필요 시 Sonnet 5). Claude.ai 구독(Max 등)과는
      완전히 별개의 유료 종량제 결제가 필요.
    두 provider 모두 "도구 호출(tool/function calling)"로 구조화 출력을 강제해 4지선다
@@ -128,8 +129,10 @@ wiki-quiz/
 - `GEMINI_API_KEY` — Gemini API 키 (https://aistudio.google.com 에서 발급, `QUIZ_PROVIDER=gemini`일 때 필수)
 - `ANTHROPIC_API_KEY` — Claude API 키 (`QUIZ_PROVIDER=claude`일 때 필수. Claude.ai 구독과는
   별개의 유료 종량제 키)
-- `QUIZ_MODEL` — 비워두면 provider별 기본값(`gemini-2.0-flash` / `claude-haiku-4-5`) 사용,
-  품질 이슈 시 `gemini-2.5-flash` / `claude-sonnet-5` 등으로 전환
+- `QUIZ_MODEL` — 비워두면 provider별 기본값(`gemini-3.5-flash-lite` / `claude-haiku-4-5`) 사용,
+  품질 이슈 시 `gemini-3.5-flash` / `claude-sonnet-5` 등으로 전환 (단, Gemini는 구모델
+  폐기가 잦으니 전환 전 https://ai.google.dev/gemini-api/docs/pricing 에서 현재 유효한
+  모델명인지 먼저 확인할 것)
 - `DELIVERY_MODE` — `outline` / `slack` / `email` / `cli`
 - (전달 방식별 추가 값: `SLACK_WEBHOOK_URL`, `SMTP_*` 등)
 

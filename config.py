@@ -66,7 +66,7 @@ def load_config() -> Config:
         anthropic_api_key=anthropic_api_key,
         gemini_api_key=gemini_api_key,
         quiz_model=os.environ.get("QUIZ_MODEL") or (
-            "gemini-2.0-flash" if quiz_provider == "gemini" else "claude-haiku-4-5"
+            "gemini-3.5-flash-lite" if quiz_provider == "gemini" else "claude-haiku-4-5"
         ),
         sample_chunk_count=int(os.environ.get("SAMPLE_CHUNK_COUNT", "15")),
         question_count=int(os.environ.get("QUESTION_COUNT", "3")),
