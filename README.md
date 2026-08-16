@@ -2,7 +2,7 @@
 
 개발 위키(https://wiki.class.day/doc/42-NgGIyvI63i 등, **Outline** 기반) 전체를 순회해
 텍스트·PDF·Word·Markdown 첨부파일까지 포함한 콘텐츠에서 매일 랜덤 3문제 퀴즈를
-Claude API로 자동 생성하는 배치 파이프라인.
+LLM API(기본 Gemini, 필요 시 Claude)로 자동 생성하는 배치 파이프라인.
 
 > ⚠️ 이전 설계 메모에는 대상 위키를 Notion으로 잘못 가정하고 있었음. `wiki.class.day` 페이지의
 > HTML 소스(`<title>Outline</title>`, "A modern team knowledge base..." 문구, `/static/assets/...`
@@ -12,7 +12,7 @@ Claude API로 자동 생성하는 배치 파이프라인.
 ## 현재 상태: 스켈레톤 → 구현 완료 (실제 위키 연동 전 최종 확인 필요)
 
 이전 설계 메모 단계의 `NotImplementedError` 스켈레톤을 모두 실제 코드로 채웠고, 로컬에서
-Outline API·Claude API를 모킹한 end-to-end 드라이런과 `pytest` 전체 스위트(13개)로 검증했다.
+Outline API·LLM API를 모킹한 end-to-end 드라이런과 `pytest` 전체 스위트로 검증했다.
 다만 실제 `wiki.class.day` 인스턴스에 대한 연동은 아직 한 번도 실행해보지 않았으므로, 아래
 "실제 연동 전 확인 필요" 항목은 여전히 남아 있다 — 이 부분은 실제 API 키/권한을 가진 사람이
 검증해야 하며, 이 저장소 작업만으로는 확인할 수 없었다.
@@ -30,9 +30,12 @@ Outline API·Claude API를 모킹한 end-to-end 드라이런과 `pytest` 전체 
    `Authorization: Bearer` 헤더로 함께 실어 보내도록 구현(아래 "확인 필요" 참고).
 3. **랜덤 샘플링** — `sampler.py`: 문서/첨부 텍스트를 문단 단위로 모아 최대 500자
    청크로 쪼갠 뒤(`build_chunks`), 그중 무작위 표본을 추출(`sample_chunks`)해 토큰 비용 억제.
-4. **퀴즈 생성** — `quiz_generator.py`: Claude API (Haiku 4.5 기본, 필요 시 Sonnet 5)를
-   `tool_choice`로 구조화 출력을 강제해 4지선다 3문제를 JSON으로 생성(자유 텍스트 파싱보다
-   견고함).
+4. **퀴즈 생성** — `quiz_generator.py`: `QUIZ_PROVIDER`로 LLM을 선택.
+   - `gemini`(기본값) — Gemini API, `gemini-2.0-flash`. 무료 티어로 사용 가능해 기본으로 삼음.
+   - `claude` — Claude API, Haiku 4.5 기본(필요 시 Sonnet 5). Claude.ai 구독(Max 등)과는
+     완전히 별개의 유료 종량제 결제가 필요.
+   두 provider 모두 "도구 호출(tool/function calling)"로 구조화 출력을 강제해 4지선다
+   문제를 JSON으로 생성(자유 텍스트 파싱보다 견고함).
 5. **결과 전달** — `delivery/`: Outline 문서 생성(`documents.create`) / Slack / 이메일 / CLI
    중 `DELIVERY_MODE`로 선택. 필수 설정이 비어 있으면 각 모듈이 바로 `ValueError`를 던진다.
 6. **매일 자동 실행** — `.github/workflows/daily_quiz.yml` (GitHub Actions cron, UTC).
@@ -57,8 +60,8 @@ Outline API·Claude API를 모킹한 end-to-end 드라이런과 `pytest` 전체 
    내용을 텍스트로 뽑아낸다.
 4. **아무거나 몇 장 뽑는다** — 도서관 전체 내용을 다 기억하면 너무 비싸고 느리니까,
    그중에서 무작위로 몇 조각(청크)만 뽑는다. 제비뽑기와 같음.
-5. **똑똑한 친구에게 물어본다** — 뽑은 조각들을 Claude(AI)에게 보여주고 "이 내용으로
-   4지선다 퀴즈 3개만 만들어줘"라고 부탁. Claude가 문제·보기·정답·해설을 만들어서 돌려줌.
+5. **똑똑한 친구에게 물어본다** — 뽑은 조각들을 LLM(기본 Gemini)에게 보여주고 "이 내용으로
+   4지선다 퀴즈 3개만 만들어줘"라고 부탁. AI가 문제·보기·정답·해설을 만들어서 돌려줌.
 6. **우편함에 넣는다** — 완성된 퀴즈를 미리 정해둔 곳(Outline 문서/Slack/이메일/터미널
    화면 중 하나)에 배달하고, 로봇은 다시 잠든다.
 7. **내일 또 반복** — 어제 무슨 문제를 냈는지는 **전혀 기억하지 않음.** 매일 처음부터
@@ -95,7 +98,7 @@ wiki-quiz/
 │   ├── outline_client.py            # 1. 위키 순회 수집
 │   ├── attachment_parser.py         # 2. 첨부파일 파싱
 │   ├── sampler.py                   # 3. 랜덤 샘플링
-│   ├── quiz_generator.py            # 4. Claude API 퀴즈 생성
+│   ├── quiz_generator.py            # 4. LLM(Gemini/Claude) 퀴즈 생성
 │   ├── delivery/
 │   │   ├── __init__.py
 │   │   ├── outline_document.py      # 5-A. Outline 문서 생성
@@ -121,8 +124,12 @@ wiki-quiz/
 - `OUTLINE_ROOT_COLLECTION_ID` — 순회를 시작할 루트 컬렉션 ID (컬렉션 전체를 순회)
 - `OUTLINE_DOCUMENT_ID` — 설정하면 컬렉션 전체 대신 이 문서(+하위 트리)만 순회.
   둘 중 하나는 필수이며, 둘 다 설정 시 `OUTLINE_DOCUMENT_ID`가 우선한다.
-- `ANTHROPIC_API_KEY` — Claude API 키
-- `QUIZ_MODEL` — 기본 `claude-haiku-4-5`, 필요 시 `claude-sonnet-5`로 전환
+- `QUIZ_PROVIDER` — `gemini`(기본값, 무료 티어) / `claude`(유료 종량제)
+- `GEMINI_API_KEY` — Gemini API 키 (https://aistudio.google.com 에서 발급, `QUIZ_PROVIDER=gemini`일 때 필수)
+- `ANTHROPIC_API_KEY` — Claude API 키 (`QUIZ_PROVIDER=claude`일 때 필수. Claude.ai 구독과는
+  별개의 유료 종량제 키)
+- `QUIZ_MODEL` — 비워두면 provider별 기본값(`gemini-2.0-flash` / `claude-haiku-4-5`) 사용,
+  품질 이슈 시 `gemini-2.5-flash` / `claude-sonnet-5` 등으로 전환
 - `DELIVERY_MODE` — `outline` / `slack` / `email` / `cli`
 - (전달 방식별 추가 값: `SLACK_WEBHOOK_URL`, `SMTP_*` 등)
 
@@ -155,7 +162,7 @@ pip install -r requirements.txt
 pytest
 ```
 
-13개 테스트 모두 통과(네트워크 호출 없이 동작 — Outline/Claude API 호출은 각각
+테스트 전부 통과(네트워크 호출 없이 동작 — Outline/LLM API 호출은 각각
 monkeypatch/respx 스타일로 목킹해서 검증했다). `tests/fixtures/sample.pdf`,
 `sample.docx`는 attachment_parser 파싱 테스트용으로 새로 추가한 최소 픽스처 파일이다.
 
@@ -211,7 +218,7 @@ GitHub Actions (cron, 매일 UTC 0시)
   │ ① cfg = load_config()               [config.py]
   │    환경변수 OUTLINE_API_URL / OUTLINE_API_KEY /
   │    OUTLINE_DOCUMENT_ID(또는 OUTLINE_ROOT_COLLECTION_ID) /
-  │    ANTHROPIC_API_KEY 등을 읽어 Config 객체로 모음
+  │    GEMINI_API_KEY(또는 ANTHROPIC_API_KEY) 등을 읽어 Config 객체로 모음
   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │ ② OutlineWikiCrawler                  [outline_client.py]        │
@@ -242,15 +249,18 @@ GitHub Actions (cron, 매일 UTC 0시)
 │   build_chunks()  : 문서 본문 + 첨부 텍스트를 문단 단위로 모아   │
 │                      최대 500자짜리 조각(TextChunk)들로 분해      │
 │   sample_chunks() : 그중 무작위로 SAMPLE_CHUNK_COUNT개만 추출     │
-│                      (Claude에게 위키 전체를 보내면 비용·시간 폭증)│
+│                      (LLM에게 위키 전체를 보내면 비용·시간 폭증)  │
 └─────────────────────────────────────────────────────────────────┘
   │  sampled: list[TextChunk]  (매번 새로 무작위 추출, 기록 안 남음)
   ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ ⑤ quiz_generator.py                                              │
-│   Claude API(Anthropic) 호출, tool_choice로 구조화 출력 강제      │
+│ ⑤ quiz_generator.py  (QUIZ_PROVIDER로 분기)                      │
+│   gemini(기본) → Gemini API 호출, function_calling_config="ANY"  │
+│                  으로 구조화 출력 강제                            │
+│                  요청 헤더: x-goog-api-key: {GEMINI_API_KEY}      │
+│   claude       → Claude API(Anthropic) 호출, tool_choice로 강제   │
+│                  요청 헤더: x-api-key: {ANTHROPIC_API_KEY}        │
 │   system prompt: "주어진 조각만 근거로, 지어내지 마라"            │
-│   요청 헤더: x-api-key: {ANTHROPIC_API_KEY} (SDK가 자동 처리)     │
 │   응답: 4지선다 문제 QUESTION_COUNT개(JSON) → QuizQuestion 리스트 │
 └─────────────────────────────────────────────────────────────────┘
   │  questions: list[QuizQuestion]
@@ -287,7 +297,7 @@ GitHub Actions (cron, 매일 UTC 0시)
 │                        │
 │  OUTLINE_API_KEY       │
 │  OUTLINE_DOCUMENT_ID   │
-│  ANTHROPIC_API_KEY ... │
+│  GEMINI_API_KEY ...    │
 └──────────┬─────────────┘
            │ (2) cron 시각이 되면 GitHub이
            │     임시 가상머신 한 대를 새로 띄우고

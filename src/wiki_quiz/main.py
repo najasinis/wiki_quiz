@@ -49,7 +49,8 @@ def run() -> None:
     all_chunks = build_chunks(docs, attachments)
     sampled = sample_chunks(all_chunks, cfg.sample_chunk_count)
 
-    questions = generate_quiz(sampled, cfg.question_count, cfg.quiz_model, cfg.anthropic_api_key)
+    quiz_api_key = cfg.gemini_api_key if cfg.quiz_provider == "gemini" else cfg.anthropic_api_key
+    questions = generate_quiz(sampled, cfg.question_count, cfg.quiz_model, quiz_api_key, cfg.quiz_provider)
 
     deliver(cfg.delivery_mode, questions, cfg)
 

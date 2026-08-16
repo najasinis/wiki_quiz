@@ -2,8 +2,9 @@
 # macOS 기본 `python3`는 버전이 낮을 수 있으니 `python3 --version`으로 먼저 확인할 것.
 # (레포 루트의 `.python-version` 참고 — pyenv 사용 시 자동으로 3.12를 잡아준다)
 
-# Claude API
-anthropic>=0.40.0
+# 퀴즈 생성 LLM (QUIZ_PROVIDER로 선택)
+google-genai>=1.0.0     # gemini (기본값, 무료 티어)
+anthropic>=0.40.0       # claude (유료 종량제, QUIZ_PROVIDER=claude 일 때만 사용)
 
 # 첨부파일 파싱
 pdfplumber>=0.11.0      # PDF

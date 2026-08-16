@@ -17,7 +17,9 @@ class Config:
     outline_root_collection_id: str | None
     outline_document_id: str | None
 
-    anthropic_api_key: str
+    quiz_provider: str  # "gemini" | "claude"
+    anthropic_api_key: str | None  # QUIZ_PROVIDER=claude 일 때만 필요
+    gemini_api_key: str | None     # QUIZ_PROVIDER=gemini 일 때만 필요
     quiz_model: str
 
     sample_chunk_count: int
@@ -44,13 +46,25 @@ def load_config() -> Config:
             "OUTLINE_ROOT_COLLECTION_ID 또는 OUTLINE_DOCUMENT_ID 중 하나는 반드시 설정해야 합니다."
         )
 
+    quiz_provider = os.environ.get("QUIZ_PROVIDER", "gemini")
+    anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
+    gemini_api_key = os.environ.get("GEMINI_API_KEY")
+    if quiz_provider == "claude" and not anthropic_api_key:
+        raise KeyError("QUIZ_PROVIDER=claude 인데 ANTHROPIC_API_KEY가 설정되지 않았습니다.")
+    if quiz_provider == "gemini" and not gemini_api_key:
+        raise KeyError("QUIZ_PROVIDER=gemini 인데 GEMINI_API_KEY가 설정되지 않았습니다.")
+
     return Config(
         outline_api_url=os.environ["OUTLINE_API_URL"],
         outline_api_key=os.environ["OUTLINE_API_KEY"],
         outline_root_collection_id=root_collection_id,
         outline_document_id=document_id,
-        anthropic_api_key=os.environ["ANTHROPIC_API_KEY"],
-        quiz_model=os.environ.get("QUIZ_MODEL", "claude-haiku-4-5"),
+        quiz_provider=quiz_provider,
+        anthropic_api_key=anthropic_api_key,
+        gemini_api_key=gemini_api_key,
+        quiz_model=os.environ.get("QUIZ_MODEL") or (
+            "gemini-2.0-flash" if quiz_provider == "gemini" else "claude-haiku-4-5"
+        ),
         sample_chunk_count=int(os.environ.get("SAMPLE_CHUNK_COUNT", "15")),
         question_count=int(os.environ.get("QUESTION_COUNT", "3")),
         delivery_mode=os.environ.get("DELIVERY_MODE", "cli"),

@@ -28,6 +28,8 @@ jobs:
           OUTLINE_API_KEY: ${{ secrets.OUTLINE_API_KEY }}
           OUTLINE_ROOT_COLLECTION_ID: ${{ secrets.OUTLINE_ROOT_COLLECTION_ID }}
           OUTLINE_DOCUMENT_ID: ${{ secrets.OUTLINE_DOCUMENT_ID }}
+          QUIZ_PROVIDER: ${{ vars.QUIZ_PROVIDER }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           QUIZ_MODEL: ${{ vars.QUIZ_MODEL }}
           DELIVERY_MODE: ${{ vars.DELIVERY_MODE }}
