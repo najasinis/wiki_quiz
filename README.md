@@ -118,7 +118,9 @@ wiki-quiz/
 
 - `OUTLINE_API_URL` — 인스턴스 API 베이스 URL (예: `https://wiki.class.day/api`)
 - `OUTLINE_API_KEY` — Outline API 키 (Settings → API Keys에서 발급, 대상 위키 접근 권한 필요)
-- `OUTLINE_ROOT_COLLECTION_ID` — 순회를 시작할 루트 컬렉션 ID
+- `OUTLINE_ROOT_COLLECTION_ID` — 순회를 시작할 루트 컬렉션 ID (컬렉션 전체를 순회)
+- `OUTLINE_DOCUMENT_ID` — 설정하면 컬렉션 전체 대신 이 문서(+하위 트리)만 순회.
+  둘 중 하나는 필수이며, 둘 다 설정 시 `OUTLINE_DOCUMENT_ID`가 우선한다.
 - `ANTHROPIC_API_KEY` — Claude API 키
 - `QUIZ_MODEL` — 기본 `claude-haiku-4-5`, 필요 시 `claude-sonnet-5`로 전환
 - `DELIVERY_MODE` — `outline` / `slack` / `email` / `cli`
@@ -190,6 +192,152 @@ monkeypatch/respx 스타일로 목킹해서 검증했다). `tests/fixtures/sampl
 - **한국어 PDF 텍스트 깨짐 여부** — pdfplumber 추출 결과가 실제 한국어 위키 첨부파일에서
   깨지는지는 실제 파일로만 확인 가능. 현재는 별도 인코딩 보정 로직 없이 원본 추출 결과를
   그대로 사용한다.
+
+## 데이터 흐름 (코드 기준, 어느 파일이 무엇을 하는지)
+
+이 서비스에는 DB가 없다. 매일 실행마다 아래 파이프라인을 처음부터 끝까지 통째로
+돌리고, 끝나면 메모리에 있던 모든 데이터(문서 본문, 청크, 생성한 퀴즈)는 그대로
+날아간다. `main.py`가 이 전체를 순서대로 호출하는 오케스트레이터다.
+
+```
+GitHub Actions (cron, 매일 UTC 0시)
+  │  daily_quiz.yml 이 아래 env를 주입하고
+  │  `python -m src.wiki_quiz.main` 실행
+  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ main.py : run()                                                  │
+└─────────────────────────────────────────────────────────────────┘
+  │
+  │ ① cfg = load_config()               [config.py]
+  │    환경변수 OUTLINE_API_URL / OUTLINE_API_KEY /
+  │    OUTLINE_DOCUMENT_ID(또는 OUTLINE_ROOT_COLLECTION_ID) /
+  │    ANTHROPIC_API_KEY 등을 읽어 Config 객체로 모음
+  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ ② OutlineWikiCrawler                  [outline_client.py]        │
+│                                                                    │
+│   OUTLINE_DOCUMENT_ID 있음?                                       │
+│     예 → collect_document_tree(document_id)                      │
+│           documents.info(문서 하나 조회)                          │
+│              └→ documents.list(그 문서의 자식들, 재귀)            │
+│     아니오 → collect_all_documents(root_collection_id)           │
+│           documents.list(컬렉션 최상위) → 재귀로 트리 전체 순회   │
+│                                                                    │
+│   요청마다 헤더: Authorization: Bearer {OUTLINE_API_KEY}          │
+│   응답: WikiDocument(문서 id, 제목, 본문 markdown, 첨부 링크 목록)│
+└─────────────────────────────────────────────────────────────────┘
+  │  docs: list[WikiDocument]  (메모리에만 존재, 저장 안 함)
+  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ ③ attachment_parser.py                                           │
+│   문서 본문 안 [텍스트](url) / ![이미지](url) 링크 중             │
+│   pdf/docx/doc/md 확장자만 골라 다운로드 → 텍스트 추출            │
+│   (다운로드 URL host가 Outline 인스턴스와 같을 때만 API 키를      │
+│    Authorization 헤더에 실어 보냄 — 다른 사이트로 키 유출 방지)   │
+└─────────────────────────────────────────────────────────────────┘
+  │  attachments: list[ParsedAttachment]
+  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ ④ sampler.py                                                     │
+│   build_chunks()  : 문서 본문 + 첨부 텍스트를 문단 단위로 모아   │
+│                      최대 500자짜리 조각(TextChunk)들로 분해      │
+│   sample_chunks() : 그중 무작위로 SAMPLE_CHUNK_COUNT개만 추출     │
+│                      (Claude에게 위키 전체를 보내면 비용·시간 폭증)│
+└─────────────────────────────────────────────────────────────────┘
+  │  sampled: list[TextChunk]  (매번 새로 무작위 추출, 기록 안 남음)
+  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ ⑤ quiz_generator.py                                              │
+│   Claude API(Anthropic) 호출, tool_choice로 구조화 출력 강제      │
+│   system prompt: "주어진 조각만 근거로, 지어내지 마라"            │
+│   요청 헤더: x-api-key: {ANTHROPIC_API_KEY} (SDK가 자동 처리)     │
+│   응답: 4지선다 문제 QUESTION_COUNT개(JSON) → QuizQuestion 리스트 │
+└─────────────────────────────────────────────────────────────────┘
+  │  questions: list[QuizQuestion]
+  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ ⑥ delivery/ (DELIVERY_MODE로 분기)                                │
+│   outline → documents.create 로 Outline에 새 문서로 올림          │
+│   slack   → SLACK_WEBHOOK_URL 로 메시지 전송                      │
+│   email   → SMTP_* 설정으로 발송                                  │
+│   cli     → 터미널에 그대로 출력                                  │
+└─────────────────────────────────────────────────────────────────┘
+  │
+  ▼
+프로세스 종료 → GitHub Actions 러너(컴퓨터)도 함께 종료
+   (다음 실행까지 이 파이프라인은 어디에도 존재하지 않는다)
+```
+
+핵심은 ②에서 "컬렉션 전체를 훑을지, 문서 하나(+하위 트리)만 훑을지"가
+`OUTLINE_DOCUMENT_ID` 유무로 갈린다는 점이다. 이후 ③~⑥ 단계는 입력 문서 개수가
+1개든 100개든 완전히 동일한 코드 경로를 탄다.
+
+## GitHub Secrets는 실제로 어떻게, 어디까지 안전한가
+
+"Secret에 등록해두면 어떻게 코드가 그걸 안전하게 읽어오나?"에 대한 설명이다.
+핵심 원칙 하나만 기억하면 된다 — **Secret 값은 절대 저장소(코드)에 존재하지
+않고, 딱 실행되는 그 순간에만 잠깐 컴퓨터의 "환경변수"로 주입됐다가 실행이
+끝나면 사라진다.**
+
+```
+┌──────────────────────┐
+│ GitHub 저장소 Settings │   여기 적힌 값은 암호화되어 저장.
+│  → Secrets and         │   생성한 사람 본인도 다시 값을 볼 수 없음
+│    variables → Actions │   (이름만 보이고, 값은 "Update"로 덮어쓰기만 가능)
+│                        │
+│  OUTLINE_API_KEY       │
+│  OUTLINE_DOCUMENT_ID   │
+│  ANTHROPIC_API_KEY ... │
+└──────────┬─────────────┘
+           │ (2) cron 시각이 되면 GitHub이
+           │     임시 가상머신 한 대를 새로 띄우고
+           │     이 저장소 코드를 그 안에 체크아웃
+           ▼
+┌────────────────────────────────────────────┐
+│ daily_quiz.yml 의 env: 블록                  │
+│                                              │
+│   OUTLINE_API_KEY: ${{ secrets.OUTLINE_API_KEY }} │
+│                                              │
+│  ${{ secrets.XXX }} 는 "그 값을 코드에 적어라"가 │
+│  아니라 "실행 직전에 그 값을 그 자리에 채워 넣어라"│
+│  라는 뜻. 이 yml 파일 자체에는 실제 키 값이       │
+│  단 한 글자도 적혀 있지 않다.                    │
+└──────────────────┬───────────────────────────┘
+                   │ (3) 채워진 값이 그 임시 가상머신의
+                   │     "환경변수"로만 설정됨
+                   ▼
+┌────────────────────────────────────────────┐
+│ python -m src.wiki_quiz.main 실행 중         │
+│                                              │
+│   config.py: os.environ["OUTLINE_API_KEY"]  │
+│   → 이 시점에 딱 한 번, 메모리 위에서만 읽힘   │
+│   → 파일로 저장하지 않고, 코드 어디에도        │
+│     print/log로 남기지 않음                   │
+└──────────────────┬───────────────────────────┘
+                   │ (4) 실행 끝
+                   ▼
+     가상머신 자체가 통째로 폐기됨
+     (환경변수도, 코드도, 그 실행 흔적도 전부 함께 사라짐)
+```
+
+**이 구조가 안전한 이유:**
+
+- **코드에는 값이 없다** — `daily_quiz.yml`을 아무리 열어봐도 `${{ secrets.OUTLINE_API_KEY }}`
+  라는 "이름표"만 있지 실제 키 값은 없다. 저장소가 공개(public)여도 키가 새어나가지 않음.
+- **로그에서 자동으로 가려짐** — 만약 실수로 코드가 그 값을 `print`해버려도, GitHub
+  Actions가 Secret으로 등록된 값과 일치하는 문자열을 로그에서 자동으로 `***`로
+  마스킹한다.
+- **fork된 PR에는 전달 안 됨** — 이 저장소를 다른 사람이 fork해서 PR을 보내도,
+  그 PR을 실행하는 워크플로에는 Secrets가 전달되지 않는다(악의적인 PR이 몰래
+  키를 빼가는 걸 막는 GitHub의 기본 정책).
+- **범위(scope)로 이중 방어** — `OUTLINE_API_KEY` 발급 시 `documents.list
+  documents.info`로 범위를 좁혀뒀기 때문에, 설령 이 키가 어딘가로 샌다 해도
+  문서 읽기만 가능하고 삭제·멤버 관리 같은 위험한 동작은 애초에 이 키로는 불가능.
+
+정리하면: Secrets 탭은 "코드가 실행되는 딱 그 순간에만 잠깐 빌려주는 열쇠 보관함"이고,
+`config.py`의 `os.environ[...]`은 그 순간에만 열쇠를 손에 쥐었다가 실행이 끝나면
+자동으로 손을 놓는 구조다. DB가 없는 것과 같은 이유로, 이 열쇠 역시 어디에도
+영구히 저장되지 않는다.
 
 ## 설계상 결정한 사항 (기존 "미결정 사항" 중 이번에 해소한 것)
 
