@@ -37,8 +37,14 @@ Outline API·LLM API를 모킹한 end-to-end 드라이런과 `pytest` 전체 스
      완전히 별개의 유료 종량제 결제가 필요.
    두 provider 모두 "도구 호출(tool/function calling)"로 구조화 출력을 강제해 4지선다
    문제를 JSON으로 생성(자유 텍스트 파싱보다 견고함).
-5. **결과 전달** — `delivery/`: Outline 문서 생성(`documents.create`) / Slack / 이메일 / CLI
-   중 `DELIVERY_MODE`로 선택. 필수 설정이 비어 있으면 각 모듈이 바로 `ValueError`를 던진다.
+5. **결과 전달** — `delivery/`: Outline 문서 생성(`documents.create`) / Slack / Discord /
+   Google Chat / 이메일 / CLI 중 `DELIVERY_MODE`로 선택. 필수 설정이 비어 있으면 각
+   모듈이 바로 `ValueError`를 던진다.
+   - Discord는 공식 스포일러 문법(`||텍스트||`)을 지원해서, Slack처럼 문제·정답 메시지를
+     둘로 쪼갤 필요 없이 한 메시지 안에서 정답만 가려서 보낸다(단, 메시지당 2,000자
+     제한이 있어 문제 단위로 잘라 여러 메시지로 나눠 보내는 로직이 있음).
+   - Google Chat은 스포일러 문법이 없어 Slack과 동일하게 문제/정답 메시지를 분리하되,
+     `threadKey`로 두 메시지를 같은 스레드에 묶어 대화가 흩어지지 않게 한다.
 6. **매일 자동 실행** — `.github/workflows/daily_quiz.yml` (GitHub Actions cron, UTC).
 
 ## 이 서비스는 어떻게 운영되나 (쉽게 설명)
@@ -104,6 +110,8 @@ wiki-quiz/
 │   │   ├── __init__.py
 │   │   ├── outline_document.py      # 5-A. Outline 문서 생성
 │   │   ├── slack.py                 # 5-B. Slack 발송
+│   │   ├── discord.py               # 5-B. Discord 발송
+│   │   ├── google_chat.py           # 5-B. Google Chat 발송
 │   │   ├── email.py                 # 5-B. 이메일 발송
 │   │   └── cli.py                   # 5-C. CLI 출력
 │   └── main.py                      # 전체 오케스트레이션 entrypoint
@@ -113,7 +121,9 @@ wiki-quiz/
     ├── fixtures/                    # sample.pdf / sample.docx (attachment_parser 테스트용)
     ├── test_sampler.py
     ├── test_attachment_parser.py
-    └── test_outline_client.py
+    ├── test_outline_client.py
+    ├── test_discord.py              # discord.py 메시지 조립·2,000자 분할 로직
+    └── test_google_chat.py          # google_chat.py 메시지 포맷 로직
 ```
 
 ## 설정
@@ -134,7 +144,8 @@ wiki-quiz/
   폐기가 잦으니 전환 전 https://ai.google.dev/gemini-api/docs/pricing 에서 현재 유효한
   모델명인지 먼저 확인할 것)
 - `DELIVERY_MODE` — `outline` / `slack` / `email` / `cli`
-- (전달 방식별 추가 값: `SLACK_WEBHOOK_URL`, `SMTP_*` 등)
+- (전달 방식별 추가 값: `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL`, `GOOGLE_CHAT_WEBHOOK_URL`,
+  `SMTP_*` 등)
 
 ## 로컬 실행
 
@@ -270,10 +281,14 @@ GitHub Actions (cron, 매일 UTC 0시)
   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │ ⑥ delivery/ (DELIVERY_MODE로 분기)                                │
-│   outline → documents.create 로 Outline에 새 문서로 올림          │
-│   slack   → SLACK_WEBHOOK_URL 로 메시지 전송                      │
-│   email   → SMTP_* 설정으로 발송                                  │
-│   cli     → 터미널에 그대로 출력                                  │
+│   outline     → documents.create 로 Outline에 새 문서로 올림      │
+│   slack       → SLACK_WEBHOOK_URL 로 메시지 전송 (문제/정답 분리) │
+│   discord     → DISCORD_WEBHOOK_URL 로 메시지 전송                │
+│                (||스포일러||로 정답 가림, 2000자 넘으면 분할)     │
+│   google_chat → GOOGLE_CHAT_WEBHOOK_URL 로 메시지 전송            │
+│                (문제/정답 분리 + threadKey로 같은 스레드에 묶음)  │
+│   email       → SMTP_* 설정으로 발송                              │
+│   cli         → 터미널에 그대로 출력                              │
 └─────────────────────────────────────────────────────────────────┘
   │
   ▼
@@ -354,13 +369,24 @@ GitHub Actions (cron, 매일 UTC 0시)
 
 ## 설계상 결정한 사항 (기존 "미결정 사항" 중 이번에 해소한 것)
 
-- **전달 방식(outline/slack/email/cli)** — 넷 다 구현 완료, `DELIVERY_MODE`로 전환.
-  자동 실행(GitHub Actions) 목적이라면 CLI는 사람이 보지 못하므로 Slack 또는 Email 중
-  하나를 기본으로 쓰는 걸 권장.
+- **전달 방식(outline/slack/discord/google_chat/email/cli)** — 여섯 다 구현 완료,
+  `DELIVERY_MODE`로 전환. 자동 실행(GitHub Actions) 목적이라면 CLI는 사람이 보지
+  못하므로 Slack/Discord/Google Chat/Email 중 하나를 기본으로 쓰는 걸 권장.
 - **Slack 정답 스포일러 처리** — Incoming Webhook은 스레드 답글 API를 제공하지 않아
   완벽한 스포일러 처리는 불가능. 대신 문제 메시지와 정답/해설 메시지를 두 번의 별도
   웹훅 호출로 나눠 보내는 절충안으로 구현. 진짜 스레드 답글이 필요하면 Bot 토큰 기반
   `chat.postMessage`로 교체 필요.
+- **Discord 정답 스포일러 처리** — Discord는 공식 스포일러 마크다운(`||텍스트||`)이
+  webhook 메시지에도 그대로 적용되어, Slack과 달리 메시지를 둘로 쪼갤 필요 없이
+  한 메시지 안에서 정답만 가릴 수 있다. 대신 Discord webhook의 `content` 필드가
+  2,000자로 Slack보다 빡빡해서, 문제 단위로 나눠 한도 안에서 묶고 넘치면 다음
+  메시지로 이어 보내는 로직이 필요했다.
+- **Google Chat 정답 스포일러 처리** — 공식 서식 문서 확인 결과 Google Chat은
+  Discord식 스포일러 문법을 지원하지 않는다. Slack과 동일하게 문제/정답 메시지를
+  분리하되, Google Chat 고유 기능인 `thread.threadKey`로 두 메시지를 같은 스레드에
+  묶어 최소한 대화가 흩어지지 않게 했다. 메시지 글자수 제한은 공식 문서에 명시되어
+  있지 않아 Discord와 달리 분할 로직은 넣지 않았다 — 실제 사용 중 오류가 나면
+  재검토 필요.
 - **레이트리밋 재시도 범위** — "모든 Exception 재시도"에서 "429 응답에만 재시도"로
   좁힘. 인증 오류 등 비일시적 오류를 최대 6회 재시도하며 시간을 낭비하지 않도록 함.
 - **launchd 병행 여부** — 필요성 자체는 GitHub Actions 운영 후 지연 문제가 실제로

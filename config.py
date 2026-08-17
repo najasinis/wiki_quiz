@@ -30,6 +30,8 @@ class Config:
     # delivery별 부가 설정 (선택)
     outline_quiz_log_collection_id: str | None
     slack_webhook_url: str | None
+    discord_webhook_url: str | None
+    google_chat_webhook_url: str | None
     smtp_host: str | None
     smtp_port: int | None
     smtp_user: str | None
@@ -75,6 +77,8 @@ def load_config() -> Config:
         delivery_mode=os.environ.get("DELIVERY_MODE") or "cli",
         outline_quiz_log_collection_id=os.environ.get("OUTLINE_QUIZ_LOG_COLLECTION_ID"),
         slack_webhook_url=os.environ.get("SLACK_WEBHOOK_URL"),
+        discord_webhook_url=os.environ.get("DISCORD_WEBHOOK_URL"),
+        google_chat_webhook_url=os.environ.get("GOOGLE_CHAT_WEBHOOK_URL"),
         smtp_host=os.environ.get("SMTP_HOST"),
         smtp_port=int(os.environ["SMTP_PORT"]) if os.environ.get("SMTP_PORT") else None,
         smtp_user=os.environ.get("SMTP_USER"),

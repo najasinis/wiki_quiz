@@ -35,6 +35,8 @@ jobs:
           DELIVERY_MODE: ${{ vars.DELIVERY_MODE }}
           OUTLINE_QUIZ_LOG_COLLECTION_ID: ${{ secrets.OUTLINE_QUIZ_LOG_COLLECTION_ID }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK_URL }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
