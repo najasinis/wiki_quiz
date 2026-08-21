@@ -25,7 +25,7 @@ class Config:
     sample_chunk_count: int
     question_count: int
 
-    delivery_mode: str  # "outline" | "slack" | "email" | "cli"
+    delivery_mode: str  # "outline" | "slack" | "discord" | "google_chat" | "email" | "cli"
 
     # delivery별 부가 설정 (선택)
     outline_quiz_log_collection_id: str | None
