@@ -143,7 +143,7 @@ wiki-quiz/
   품질 이슈 시 `gemini-3.5-flash` / `claude-sonnet-5` 등으로 전환 (단, Gemini는 구모델
   폐기가 잦으니 전환 전 https://ai.google.dev/gemini-api/docs/pricing 에서 현재 유효한
   모델명인지 먼저 확인할 것)
-- `DELIVERY_MODE` — `outline` / `slack` / `email` / `cli`
+- `DELIVERY_MODE` — `outline` / `slack` / `discord` / `google_chat` / `email` / `cli`
 - (전달 방식별 추가 값: `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL`, `GOOGLE_CHAT_WEBHOOK_URL`,
   `SMTP_*` 등)
 
