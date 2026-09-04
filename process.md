@@ -6,7 +6,7 @@
 > (실연동 전 체크리스트), `SECURITY_AND_COST_AUDIT.md`(보안·비용 전수조사, gitignore됨,
 > 로컬 전용)를 참고.
 
-마지막 갱신: 2026-09-05 · 커밋 `4125412` 기준
+마지막 갱신: 2026-09-05 · 커밋 `5e34a4f` 기준
 
 ---
 
@@ -56,7 +56,7 @@ Outline 위키 문서를 매일 순회해서 무작위로 뽑은 내용으로 Cl
 | 2026-08-21 | `86952ae` | `config.py` 주석에 discord/google_chat 값 누락된 것 수정 |
 | 2026-08-22 | `a19289e` | `SECURITY_AND_COST_AUDIT.md`를 gitignore에 추가 (내부 전용 유지) |
 | 2026-08-23 | `4125412` | 종합 점검 보고서(`REVIEW_2026-08-22.md`) + e2e 체크리스트/스모크 테스트 추가 (다른 세션에서 진행, Gemini 무료 티어 데이터 정책 이슈 최초 발견) |
-| 2026-09-05 | (예정) | `process.md` 신설, `/process` 명령어 추가. Gemini 무료 티어 유지 확정 + `OUTLINE_DOCUMENT_ID`를 `mOuXpLufUA` 하나로 코드 레벨 고정(다른 값이면 즉시 실패), `OUTLINE_ROOT_COLLECTION_ID` 경로 완전 비활성화. `tests/test_config.py` 4건 추가 |
+| 2026-09-05 | `5e34a4f` | `process.md` 신설, `/process` 명령어 추가. Gemini 무료 티어 유지 확정 + `OUTLINE_DOCUMENT_ID`를 `mOuXpLufUA` 하나로 코드 레벨 고정(다른 값이면 즉시 실패), `OUTLINE_ROOT_COLLECTION_ID` 경로 완전 비활성화. `tests/test_config.py` 4건 추가 |
 
 **GitHub 설정(코드 밖, Secrets/Variables) 진행 상황:**
 - ✅ `OUTLINE_API_URL` (Variable), `OUTLINE_API_KEY` / `OUTLINE_DOCUMENT_ID` / `GEMINI_API_KEY` (Secrets) 등록 확인됨
