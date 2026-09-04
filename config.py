@@ -7,6 +7,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# 보안 고정값 (2026-09-05 사용자 확정): 이 위키에는 이 문서 하나만 퀴즈 소스로 써도
+# 되고, 그 외 문서에는 민감 정보가 있어 절대 노출되면 안 된다. OUTLINE_DOCUMENT_ID가
+# 이 값과 다르면(오타, 설정 실수, 다른 컬렉션으로 확장 등) 파이프라인을 아예 실행하지
+# 않고 즉시 실패시킨다 — "설정 실수로 범위가 넓어지는 것"을 코드 레벨에서 막는 최후
+# 방어선. 단, 이건 우리 코드가 실수로 다른 문서를 읽지 않게 막을 뿐, OUTLINE_API_KEY가
+# 유출되어 이 코드를 거치지 않고 Outline API에 직접 호출되는 경우까지는 막지 못한다
+# (그 경우를 막으려면 Outline 쪽에서 이 키의 소유 계정 자체가 다른 문서를 읽을 권한이
+# 없도록 컬렉션을 restricted로 설정 + documents.add_user로 이 문서에만 권한을 부여해야
+# 한다 — README/process.md 참고). 대상 문서를 의도적으로 바꾸려면 이 값도 함께 바꿀 것.
+_ALLOWED_OUTLINE_DOCUMENT_ID = "mOuXpLufUA"
+
 
 @dataclass(frozen=True)
 class Config:
@@ -46,6 +57,20 @@ def load_config() -> Config:
     if not root_collection_id and not document_id:
         raise KeyError(
             "OUTLINE_ROOT_COLLECTION_ID 또는 OUTLINE_DOCUMENT_ID 중 하나는 반드시 설정해야 합니다."
+        )
+    # 보안 고정값 검증: 위 _ALLOWED_OUTLINE_DOCUMENT_ID 주석 참고. 다른 문서/컬렉션으로
+    # 범위가 넓어지는 설정 실수를 조용히 넘어가지 않고 여기서 바로 막는다.
+    if document_id and document_id != _ALLOWED_OUTLINE_DOCUMENT_ID:
+        raise ValueError(
+            f"OUTLINE_DOCUMENT_ID({document_id!r})가 허용된 문서({_ALLOWED_OUTLINE_DOCUMENT_ID!r})와 "
+            "다릅니다. 다른 위키 문서에는 민감 정보가 있어 의도적으로 이 문서만 허용하도록 "
+            "고정해뒀습니다. 대상 문서를 실제로 바꾸려면 config.py의 "
+            "_ALLOWED_OUTLINE_DOCUMENT_ID도 함께 수정해야 합니다."
+        )
+    if root_collection_id:
+        raise ValueError(
+            "OUTLINE_ROOT_COLLECTION_ID는 이 저장소에서 의도적으로 비활성화되어 있습니다 "
+            "(컬렉션 전체 순회는 민감 문서 노출 위험이 있어 금지). OUTLINE_DOCUMENT_ID만 사용하세요."
         )
 
     # `or "gemini"`: GitHub Actions에서 vars.QUIZ_PROVIDER 미설정 시 빈 문자열이 주입되는데,
