@@ -6,8 +6,7 @@
 > (실연동 전 체크리스트), `SECURITY_AND_COST_AUDIT.md`(보안·비용 전수조사, gitignore됨,
 > 로컬 전용)를 참고.
 
-마지막 갱신: 2026-09-07 · 커밋 `467fb20` 기준 (이후 새 프로젝트 커밋 없음 — `467fb20`은
-이 문서 자체의 커밋 해시 오타를 바로잡은 것뿐)
+마지막 갱신: 2026-09-25 · 커밋 `b9433e2` 기준
 
 ---
 
@@ -58,6 +57,12 @@ Outline 위키 문서를 매일 순회해서 무작위로 뽑은 내용으로 Cl
 | 2026-08-22 | `a19289e` | `SECURITY_AND_COST_AUDIT.md`를 gitignore에 추가 (내부 전용 유지) |
 | 2026-08-23 | `4125412` | 종합 점검 보고서(`REVIEW_2026-08-22.md`) + e2e 체크리스트/스모크 테스트 추가 (다른 세션에서 진행, Gemini 무료 티어 데이터 정책 이슈 최초 발견) |
 | 2026-09-05 | `5e34a4f` | `process.md` 신설, `/process` 명령어 추가. Gemini 무료 티어 유지 확정 + `OUTLINE_DOCUMENT_ID`를 `mOuXpLufUA` 하나로 코드 레벨 고정(다른 값이면 즉시 실패), `OUTLINE_ROOT_COLLECTION_ID` 경로 완전 비활성화. `tests/test_config.py` 4건 추가 |
+| 2026-09-19 | `fd4cb62` | E2E 스모크 테스트를 현재 구성(Gemini/Discord/단일문서)에 맞게 전면 재작성 — auth-ping 수준에서 실제 크롤링·퀴즈 생성까지 구동하는 버전으로 |
+| 2026-09-25 | `5ad4ad8` | 병렬 세션에서 갈라진 e2e 스크립트 두 벌을 `e2e_smoke_test.py` 하나로 병합, 체크리스트 문서의 스크립트 본문 복사를 파일 링크로 교체(문서 드리프트 재발 방지) |
+| 2026-09-25 | `2ba4e02` | `quiz_generator.py` Gemini 안전 필터 차단 시 `IndexError` 대신 명확한 `RuntimeError`로 처리, `test_quiz_generator.py` 신설 |
+| 2026-09-25 | `efe5521` | `wiki_quiz/retry.py` 신설 — delivery 5개 모듈(outline_document/slack/discord/google_chat/email)에 429/일시 오류 재시도 로직 추가, `outline_client.py`의 기존 재시도 로직도 여기로 통합 |
+| 2026-09-25 | `6ec688e` | `daily_quiz.yml`에 파이프라인 실패 시 Discord 알림 스텝(`if: failure()`) 추가 |
+| 2026-09-25 | `b9433e2` | `test_main.py` 신설(오케스트레이션 배선 검증), `test_config.py` 확장(provider/delivery_mode 기본값). pytest 21개 → 56개 |
 
 **GitHub 설정(코드 밖, Secrets/Variables) 진행 상황:**
 - ✅ `OUTLINE_API_URL` (Variable), `OUTLINE_API_KEY` / `OUTLINE_DOCUMENT_ID` / `GEMINI_API_KEY` (Secrets) 등록 확인됨
@@ -78,10 +83,10 @@ Outline 위키 문서를 매일 순회해서 무작위로 뽑은 내용으로 Cl
   아니면 즉시 실패하도록 고정해서, 잘못된 값이 등록돼 있다면 실행 시 바로 드러남
 
 ### 코드 개선 검토 항목 (`REVIEW_2026-08-22.md` 3번 항목 근거)
-- [ ] [높음] `quiz_generator.py::_generate_with_gemini` — Gemini가 안전 필터 등으로 응답을 차단하면 `IndexError`/`TypeError`로 죽음. 명확한 예외 처리 필요
-- [ ] [중간] `delivery/*.py` 5개 모듈에 429/일시적 오류 재시도 로직 없음 (Outline 크롤링 단계만 있음)
-- [ ] [중간] 워크플로 실패 시 알림 스텝 없음 (`if: failure()`로 Slack/Discord 알림 추가 검토)
-- [ ] [중간] `quiz_generator.py`/`main.py`/`config.py`에 대한 단위 테스트 없음 (현재 21개 테스트는 이 세 파일을 커버 안 함)
+- [x] [높음] `quiz_generator.py::_generate_with_gemini` — Gemini가 안전 필터 등으로 응답을 차단하면 `IndexError`/`TypeError`로 죽던 문제. `_raise_if_gemini_blocked`를 추가해 `prompt_feedback.block_reason`/빈 `candidates`/`finish_reason != STOP`/빈 `content.parts`를 먼저 사람이 읽을 수 있는 `RuntimeError`로 바꿔 던지도록 수정 (2026-09-25)
+- [x] [중간] `delivery/*.py` 5개 모듈에 429/일시적 오류 재시도 로직 없음 — `wiki_quiz/retry.py`에 공통 정책(`post_with_retry`/`smtp_retry`) 신설, outline_client.py의 기존 429 로직도 여기로 통합. outline_document/slack/discord/google_chat은 POST 한 번 단위로, email은 SMTP 연결 단위로 재시도 (요청 하나 단위로만 감싸서 한쪽 메시지가 재시도되는 동안 이미 성공한 다른 메시지가 중복 전송되지 않게 함) (2026-09-25)
+- [x] [중간] 워크플로 실패 시 알림 스텝 없음 — `daily_quiz.yml`에 `if: failure()` 스텝 추가, `DISCORD_WEBHOOK_URL`이 있으면 실패 시에만 Discord로 알림 (2026-09-25)
+- [x] [중간] `quiz_generator.py`/`main.py`/`config.py`에 대한 단위 테스트 없음 — `test_quiz_generator.py`(LLM 응답 모킹 + 안전필터 차단 회귀 테스트), `test_main.py`(오케스트레이션 배선 검증), `test_config.py` 확장(provider/delivery_mode 기본값·검증) 추가. `test_retry.py`도 신설. 21개 → 56개 (2026-09-25)
 - [ ] [낮음] `requirements.txt`의 `anthropic`/`google-genai` 버전 상한 없음 (breaking release 시 크론이 조용히 깨질 위험)
 - [ ] [낮음] `SAMPLE_CHUNK_COUNT`/`QUESTION_COUNT`에 값 검증(0 이하 방지) 없음
 - [ ] [낮음] `requirements.txt`의 죽은 `slack_sdk` 주석 정리
