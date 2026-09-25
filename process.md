@@ -6,7 +6,7 @@
 > (실연동 전 체크리스트), `SECURITY_AND_COST_AUDIT.md`(보안·비용 전수조사, gitignore됨,
 > 로컬 전용)를 참고.
 
-마지막 갱신: 2026-09-25 · 커밋 `b9433e2` 기준
+마지막 갱신: 2026-09-25 · 커밋 `28f3ff6` 기준
 
 ---
 
@@ -26,17 +26,48 @@ Outline 위키 문서를 매일 순회해서 무작위로 뽑은 내용으로 Cl
   민감 정보가 있어 절대 노출되면 안 된다**는 전제 하의 결정. → 아래 "문서 접근 범위 제한"으로
   코드 레벨 방어 추가.
 
-## 지금 당장 결정/실행 필요 (사람 판단 대기 중) ⚠️
+## 지금 해야 할 순서 (사람 실행 — A→B→C 순서대로, D는 여유 될 때) ⚠️
 
-- **[진짜 100% 보장을 위한 Outline 권한 제한 — 아직 미실행]** 코드는 `OUTLINE_DOCUMENT_ID`가
-  `mOuXpLufUA`가 아니면 즉시 실패하도록 고정했지만(`config.py`), 이건 "우리 코드가 실수로
-  다른 문서를 안 읽는다"만 보장한다. `OUTLINE_API_KEY`가 유출되어 코드를 거치지 않고 Outline
-  API에 직접 호출되면, 그 키의 소유 계정이 원래 읽을 수 있는 문서는 다 읽힌다. **진짜 크리덴셜
-  레벨 100% 보장**을 원하면 Outline 쪽에서:
-  1. 이 문서가 속한 컬렉션을 "제한됨(restricted)"으로 설정
-  2. 전용 계정을 만들고 `documents.add_user`로 이 문서에만 권한 부여
-  3. 그 계정으로 `OUTLINE_API_KEY` 재발급
-  아직 실행 안 됨 — Outline 관리자 화면 캡처 주면 단계별로 안내 가능.
+배포 검증(A~C)과 Outline 권한 잠그기(D)를 하나의 순서로 정리한 것. A→B→C를 먼저
+끝내서 "파이프라인이 실제로 도는가"부터 확인하고, D는 급하지 않으니 그다음에.
+
+### A. 로컬에서 전체 파이프라인 검증
+- [ ] A-1. `cp .env.example .env` 후 실제 키 채우기 (`OUTLINE_API_URL`,
+  `OUTLINE_API_KEY`, `OUTLINE_DOCUMENT_ID=mOuXpLufUA`, `GEMINI_API_KEY`,
+  `DELIVERY_MODE=discord`, `DISCORD_WEBHOOK_URL`)
+- [ ] A-2. `pip install -r requirements.txt`
+- [ ] A-3. `python3 tests/e2e_smoke_test.py` — 0~7단계 전부 `[OK]`인지 확인
+      (`[FAIL]` 뜨면 그 메시지 그대로 공유)
+- [ ] A-4. 통과하면 `python3 tests/e2e_smoke_test.py --send`로 Discord에 실제 1회 전송,
+      채널에서 도착 확인
+
+### B. GitHub Secrets/Variables 등록 확인
+- [ ] B-1. Settings → Secrets and variables → Actions → **Secrets** 탭에서
+      `DISCORD_WEBHOOK_URL` 존재 확인 (없으면 등록)
+- [ ] B-2. **Variables** 탭에서 `DELIVERY_MODE` = `discord` 확인 (없으면 등록)
+
+### C. GitHub Actions 실전 확인
+- [ ] C-1. Actions 탭 → Daily Wiki Quiz → **Run workflow** 수동 실행
+- [ ] C-2. 로그에서 성공(초록 체크) 확인 — 실패하면 에러 로그 공유
+- [ ] C-3. Discord 채널에 실제 퀴즈 도착 확인
+      → 여기까지 되면 **파이프라인 첫 완전 성공** 기록
+
+### D. Outline 권한 진짜 100% 잠그기 (급하지 않음, 여유될 때)
+코드(`config.py`의 `_ALLOWED_OUTLINE_DOCUMENT_ID`)는 "우리 코드가 실수로 다른 문서를
+안 읽는다"만 보장한다. `OUTLINE_API_KEY`가 유출돼 코드를 거치지 않고 Outline API에
+직접 호출되면, 그 키의 소유 계정이 원래 읽을 수 있는 문서는 다 읽힌다. 크리덴셜
+레벨 100% 보장을 원하면 Outline 쪽(전부 Outline 웹사이트에서):
+- [ ] D-1. `mOuXpLufUA` 문서가 속한 컬렉션 확인
+- [ ] D-2. 그 컬렉션을 "제한됨(restricted)"으로 설정 (팀 전체가 아니라 지정된 사람/계정만)
+- [ ] D-3. 전용 계정 준비 (새 계정 만들거나, 다른 민감 컬렉션 권한 없는 기존 계정 사용)
+- [ ] D-4. 그 문서 하나에만 D-3 계정에게 읽기 권한 부여 (문서의 공유/접근 관리 메뉴)
+- [ ] D-5. D-3 계정으로 로그인해 새 API 키 발급 (범위: `documents.list documents.info`)
+- [ ] D-6. GitHub Secrets → `OUTLINE_API_KEY` 값을 D-5에서 발급한 키로 교체 (Update)
+      — **새 Secret을 만드는 게 아니라 기존 `OUTLINE_API_KEY` 값 자체를 덮어쓰는 것**
+- [ ] D-7. 위 A-3(e2e 스모크 테스트) 다시 돌려서 여전히 정상 동작하는지 확인
+
+Outline 관리자 화면이 어떻게 생겼는지 몰라서, D 시작할 때 화면 캡처 주면서 같이
+단계별로 진행하는 게 정확함.
 
 ---
 
@@ -74,11 +105,9 @@ Outline 위키 문서를 매일 순회해서 무작위로 뽑은 내용으로 Cl
 ## 남은 것 (TODO)
 
 ### 사람이 결정/실행해야 하는 것
-- [ ] Gemini 무료 티어 데이터 정책 최종 확정 (위 "지금 당장 결정 필요" 참고)
-- [ ] GitHub Secrets에 `DISCORD_WEBHOOK_URL` 등록
-- [ ] GitHub Variables에 `DELIVERY_MODE=discord` 등록
-- [ ] 등록 후 Actions에서 수동 실행(`Run workflow`)해서 Discord로 실제 퀴즈 도착하는지 확인 — **아직 전체 파이프라인이 끝까지 성공한 로그를 확인한 적 없음** (Outline 수집 단계는 성공 확인됨, Gemini 생성 이후 단계는 미확인)
-- [ ] `tests/e2e_smoke_test.py`를 실제 `.env` 채워서 본인 터미널에서 실행 (Outline/Gemini 키 유효성 확인)
+- [ ] **배포 검증 + Outline 권한 잠그기 A~D 순서 전체** → 위 "지금 해야 할 순서" 섹션 참고
+  (예전엔 이 항목이 여기 개별 체크박스로 흩어져 있었는데, 2026-09-25에 A/B/C/D 순서
+  하나로 합쳤다 — 중복 방지를 위해 여기서는 저 섹션을 가리키기만 함)
 - [x] `OUTLINE_DOCUMENT_ID` 값이 정확히 의도한 문서(`mOuXpLufUA`)인지 — 코드가 이 값이
   아니면 즉시 실패하도록 고정해서, 잘못된 값이 등록돼 있다면 실행 시 바로 드러남
 
