@@ -33,7 +33,8 @@ import re
 from dataclasses import dataclass, field
 
 import httpx
-from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+
+from wiki_quiz.retry import http_retry
 
 # Markdown 링크/이미지 문법에서 URL만 추출: ![alt](url) 또는 [text](url)
 _MARKDOWN_LINK_RE = re.compile(r"!?\[[^\]]*\]\((https?://[^\s)]+)\)")
@@ -69,21 +70,9 @@ def _raise_with_body(resp: httpx.Response) -> None:
     )
 
 
-def _is_rate_limited(exc: BaseException) -> bool:
-    """429(Too Many Requests) 응답에 대해서만 재시도한다.
-
-    스켈레톤 TODO("모든 Exception 재시도")를 좁힌 부분: 인증 실패나 잘못된 요청 같은
-    비일시적 오류까지 여러 번 재시도하며 시간을 버리지 않도록 한다.
-    """
-    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429
-
-
-_outline_retry = retry(
-    retry=retry_if_exception(_is_rate_limited),
-    wait=wait_exponential(multiplier=1, min=1, max=60),
-    stop=stop_after_attempt(6),
-    reraise=True,
-)
+# 429(Too Many Requests)에 대해서만 재시도하는 공통 정책 — wiki_quiz/retry.py 참고.
+# 원래 이 모듈에만 있던 재시도 로직을 delivery 모듈들도 쓸 수 있게 그쪽으로 옮겼다.
+_outline_retry = http_retry
 
 
 class OutlineWikiCrawler:

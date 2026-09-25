@@ -5,6 +5,7 @@ from datetime import date
 import httpx
 
 from wiki_quiz.quiz_generator import QuizQuestion
+from wiki_quiz.retry import post_with_retry
 
 
 def deliver(questions: list[QuizQuestion], config) -> None:
@@ -19,21 +20,23 @@ def deliver(questions: list[QuizQuestion], config) -> None:
     title = f"오늘의 퀴즈 - {today}"
     body_md = f"# {title}\n\n{_questions_to_markdown(questions)}"
 
-    resp = httpx.post(
-        f"{config.outline_api_url}/documents.create",
-        headers={
-            "Authorization": f"Bearer {config.outline_api_key}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "title": title,
-            "text": body_md,
-            "collectionId": config.outline_quiz_log_collection_id,
-            "publish": True,
-        },
-        timeout=30.0,
-    )
-    resp.raise_for_status()
+    with httpx.Client(timeout=30.0) as client:
+        # Outline API 자체가 429를 낼 수 있어(outline_client.py와 동일한 인스턴스),
+        # 429일 때만 지수 백오프로 재시도한다.
+        post_with_retry(
+            client,
+            f"{config.outline_api_url}/documents.create",
+            headers={
+                "Authorization": f"Bearer {config.outline_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "title": title,
+                "text": body_md,
+                "collectionId": config.outline_quiz_log_collection_id,
+                "publish": True,
+            },
+        )
 
 
 def _questions_to_markdown(questions: list[QuizQuestion]) -> str:

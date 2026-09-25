@@ -5,6 +5,7 @@ from datetime import date
 from email.message import EmailMessage
 
 from wiki_quiz.quiz_generator import QuizQuestion
+from wiki_quiz.retry import smtp_retry
 
 
 def deliver(questions: list[QuizQuestion], config) -> None:
@@ -32,6 +33,16 @@ def deliver(questions: list[QuizQuestion], config) -> None:
     msg["To"] = config.email_to
     msg.set_content(_format_plain_text(questions, today))
 
+    _send(config, msg)
+
+
+@smtp_retry
+def _send(config, msg: EmailMessage) -> None:
+    """일시적 연결 오류(SMTPConnectError 등)일 때만 재시도한다.
+
+    인증 실패(SMTPAuthenticationError)는 재시도 대상이 아니라 즉시 실패한다 — 429에
+    해당하는 개념이 SMTP엔 없어, wiki_quiz.retry.is_transient_smtp_error가 판단 기준.
+    """
     with smtplib.SMTP(config.smtp_host, config.smtp_port) as s:
         s.starttls()
         s.login(config.smtp_user, config.smtp_app_password)

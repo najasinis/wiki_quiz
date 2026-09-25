@@ -20,6 +20,7 @@ Google Chat 고유 기능인 `thread.threadKey`로 문제/정답 두 메시지�
 import httpx
 
 from wiki_quiz.quiz_generator import QuizQuestion
+from wiki_quiz.retry import post_with_retry
 
 # 문제/정답 메시지를 같은 스레드로 묶기 위한 고정 키. 매일 같은 값을 쓰면 어제
 # 스레드에 계속 이어붙을 수 있어, 날짜를 섞어 하루 단위로 새 스레드를 만든다.
@@ -38,18 +39,19 @@ def deliver(questions: list[QuizQuestion], config) -> None:
         )
 
     thread = {"threadKey": _thread_key()}
+    # 429일 때만 재시도(post_with_retry) — 두 POST를 각각 따로 감싸서, 두 번째가 재시도되는
+    # 동안 이미 성공한 첫 메시지가 스레드에 중복으로 다시 올라가지 않게 한다.
     with httpx.Client(timeout=15.0) as client:
-        resp = client.post(
+        post_with_retry(
+            client,
             config.google_chat_webhook_url,
             json={"text": _format_questions(questions), "thread": thread},
         )
-        resp.raise_for_status()
-
-        resp2 = client.post(
+        post_with_retry(
+            client,
             config.google_chat_webhook_url,
             json={"text": _format_answers(questions), "thread": thread},
         )
-        resp2.raise_for_status()
 
 
 def _format_questions(questions: list[QuizQuestion]) -> str:

@@ -11,6 +11,7 @@ Bot 토큰 기반 구현으로 교체해야 한다 (README "미결정 사항"에
 import httpx
 
 from wiki_quiz.quiz_generator import QuizQuestion
+from wiki_quiz.retry import post_with_retry
 
 
 def deliver(questions: list[QuizQuestion], config) -> None:
@@ -19,13 +20,13 @@ def deliver(questions: list[QuizQuestion], config) -> None:
     if not config.slack_webhook_url:
         raise ValueError("DELIVERY_MODE=slack 이지만 SLACK_WEBHOOK_URL이 설정되지 않았습니다.")
 
+    # 429일 때만 재시도(post_with_retry) — 두 번의 POST를 각각 따로 감싸서, 두 번째가
+    # 429로 재시도되는 동안 이미 성공한 첫 메시지가 중복으로 다시 올라가지 않게 한다.
     with httpx.Client(timeout=15.0) as client:
-        resp = client.post(config.slack_webhook_url, json={"text": _format_questions(questions)})
-        resp.raise_for_status()
+        post_with_retry(client, config.slack_webhook_url, json={"text": _format_questions(questions)})
 
         # 정답 스포일러 방지를 위해 별도 메시지로 분리 발송 (진짜 스레드 답글 아님, 위 NOTE 참고)
-        resp2 = client.post(config.slack_webhook_url, json={"text": _format_answers(questions)})
-        resp2.raise_for_status()
+        post_with_retry(client, config.slack_webhook_url, json={"text": _format_answers(questions)})
 
 
 def _format_questions(questions: list[QuizQuestion]) -> str:

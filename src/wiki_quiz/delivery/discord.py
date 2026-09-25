@@ -17,6 +17,7 @@
 import httpx
 
 from wiki_quiz.quiz_generator import QuizQuestion
+from wiki_quiz.retry import post_with_retry
 
 _DISCORD_CONTENT_LIMIT = 2000
 _HEADER = "**오늘의 위키 퀴즈** :bulb:\n"
@@ -28,10 +29,11 @@ def deliver(questions: list[QuizQuestion], config) -> None:
     if not config.discord_webhook_url:
         raise ValueError("DELIVERY_MODE=discord 이지만 DISCORD_WEBHOOK_URL이 설정되지 않았습니다.")
 
+    # 메시지가 여러 개로 쪼개지는 경우, 각 POST를 따로 재시도(post_with_retry)해서
+    # 뒤 메시지의 429 때문에 이미 성공한 앞 메시지가 중복 전송되지 않게 한다.
     with httpx.Client(timeout=15.0) as client:
         for msg in _format_messages(questions):
-            resp = client.post(config.discord_webhook_url, json={"content": msg})
-            resp.raise_for_status()
+            post_with_retry(client, config.discord_webhook_url, json={"content": msg})
 
 
 def _format_messages(questions: list[QuizQuestion]) -> list[str]:
