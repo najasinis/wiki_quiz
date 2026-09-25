@@ -43,3 +43,21 @@ jobs:
           SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
         run: python -m src.wiki_quiz.main
+
+      - name: Notify Discord on failure
+        # 이전까지는 실패해도 GitHub Actions 대시보드를 직접 열어보기 전엔 아무도 몰랐다
+        # (REVIEW_2026-08-22.md 3번 항목). DISCORD_WEBHOOK_URL이 있으면 실패 시에만 알림을
+        # 보낸다 — 매일 성공 알림까지 보내면 소음이 되므로 실패 때만.
+        if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "DISCORD_WEBHOOK_URL 미설정 — 실패 알림 스킵"
+            exit 0
+          fi
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -sS -X POST -H "Content-Type: application/json" \
+            -d "{\"content\": \"⚠️ wiki-quiz 데일리 파이프라인 실패: ${run_url}\"}" \
+            "$DISCORD_WEBHOOK_URL" \
+            || echo "실패 알림 전송 자체도 실패함 (원본 파이프라인 실패는 그대로 워크플로 실패로 보고됨)"
