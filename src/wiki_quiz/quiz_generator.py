@@ -161,9 +161,50 @@ def _generate_with_gemini(user_prompt: str, model: str, api_key: str) -> list[di
         ),
     )
 
+    _raise_if_gemini_blocked(response)
+
     for part in response.candidates[0].content.parts:
         if part.function_call and part.function_call.name == _SUBMIT_QUIZ_TOOL_NAME:
             return dict(part.function_call.args).get("questions", [])
     raise RuntimeError(
         f"Gemini 응답에서 '{_SUBMIT_QUIZ_TOOL_NAME}' function_call을 찾지 못했습니다: {response!r}"
     )
+
+
+def _raise_if_gemini_blocked(response) -> None:
+    """Gemini가 안전 필터 등으로 응답을 막으면 candidates가 비어있거나
+    content.parts가 비어있을 수 있다. 그대로 두면 아래 for문에서 IndexError/TypeError로
+    죽어서 원인을 알기 어려우므로, 여기서 먼저 사람이 읽을 수 있는 메시지로 바꿔 던진다.
+
+    (REVIEW_2026-08-22.md 3번 항목에서 지적된 미해결 이슈.)
+    """
+    # 프롬프트 자체가 막히면 candidates 없이 prompt_feedback.block_reason만 채워진다.
+    prompt_feedback = getattr(response, "prompt_feedback", None)
+    block_reason = getattr(prompt_feedback, "block_reason", None)
+    if block_reason:
+        raise RuntimeError(
+            f"Gemini가 프롬프트 자체를 차단했습니다 (block_reason={block_reason}). "
+            "위키 원문에 안전 필터에 걸릴 만한 내용이 있는지 확인하세요."
+        )
+
+    candidates = getattr(response, "candidates", None) or []
+    if not candidates:
+        raise RuntimeError(f"Gemini가 후보 응답을 하나도 반환하지 않았습니다: {response!r}")
+
+    candidate = candidates[0]
+    finish_reason = getattr(candidate, "finish_reason", None)
+    finish_reason_name = getattr(finish_reason, "name", finish_reason)
+    # STOP(정상 종료) 외에는 SAFETY(안전 필터 차단)/RECITATION/MAX_TOKENS/OTHER 등
+    # 비정상 종료다. None은 SDK/모델에 따라 아예 안 채워주는 경우가 있어 통과시킨다.
+    if finish_reason_name not in (None, "STOP"):
+        raise RuntimeError(
+            f"Gemini 응답이 정상 종료되지 않았습니다 (finish_reason={finish_reason_name}). "
+            "안전 필터 차단, 토큰 한도 초과 등이 원인일 수 있습니다."
+        )
+
+    parts = getattr(getattr(candidate, "content", None), "parts", None)
+    if not parts:
+        raise RuntimeError(
+            f"Gemini 응답에 content.parts가 없습니다 (finish_reason={finish_reason_name}, "
+            f"candidate={candidate!r})"
+        )
