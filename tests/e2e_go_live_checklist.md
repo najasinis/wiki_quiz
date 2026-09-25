@@ -49,120 +49,41 @@
 
 ---
 
-## 3. 자동화 스모크 테스트 (AI가 작성 — 실행은 실제 키를 가진 사람이)
+## 3. 자동화 e2e 스크립트 (AI가 작성 — 실행은 실제 키를 가진 사람이)
 
-아래 스크립트는 **전체 크롤링/전체 퀴즈 생성/실제 발송을 하지 않는다.** 읽기 전용 최소 호출로
-"연동이 되는가/안 되는가"만 빠르게 확인하는 용도다. `.env`를 채운 뒤 저장소 루트에서 실행:
+> 스크립트 본문을 이 문서에 그대로 복사해두던 이전 방식은 코드가 바뀔 때마다 문서가
+> 따로 놀아 두 번이나 실제 어긋났다(설정이 `OUTLINE_ROOT_COLLECTION_ID`+`ANTHROPIC_API_KEY`
+> 기준에서 `OUTLINE_DOCUMENT_ID`+Gemini 기준으로 바뀐 뒤에도 문서만 구버전으로 남아있었고,
+> 그 뒤 병렬 세션에서 스크립트가 두 벌로 갈라졌다 합쳐지는 일도 있었음). 그래서 이제부턴
+> **본문을 복사하지 않고 실제 파일만 가리킨다** — 최신 내용은 항상
+> [`tests/e2e_smoke_test.py`](e2e_smoke_test.py)를 직접 열어서 확인할 것.
+
+`.env`를 채운 뒤 저장소 루트에서 실행:
 
 ```bash
-python3 tests/e2e_smoke_test.py
+python3 tests/e2e_smoke_test.py            # 전달 단계는 미리보기만 (실제 발송 없음)
+python3 tests/e2e_smoke_test.py --send     # delivery_mode=discord면 마지막 단계에서 실제 전송까지
 ```
 
-스크립트 본문 (`tests/e2e_smoke_test.py`로 저장):
+현재 스크립트가 실제로 구동하는 단계(순서대로, 앞 단계 실패 시 이후 건너뜀):
 
-```python
-"""
-읽기 전용 스모크 테스트: 전체 크롤링/퀴즈 생성/실제 발송 없이
-"연동 자체가 되는가"만 빠르게 확인한다. 실제 API 키가 담긴 .env가 필요하므로
-AI 세션이 아니라 키를 보유한 사람이 직접 실행해야 한다.
-"""
-import os
-import sys
+0. Python 버전 확인
+1. 환경변수 + `config.load_config()` 통과 (문서 ID 보안 고정 검증 포함 — 필수 환경변수
+   목록을 이 스크립트가 따로 들고 있지 않고 실제 `config.py`를 그대로 재사용하므로, 설정이
+   바뀌어도 이 스크립트가 자동으로 같이 맞아떨어짐)
+2. Outline 인증 (`auth.info`, 읽기 전용)
+3. **실제 크롤링** (`collect_document_tree`) — 지정된 단일 문서(+하위 트리)를 실제로 수집
+4. 첨부파일 다운로드·파싱 (있으면 실제로 수행)
+5. 샘플링 (`build_chunks`/`sample_chunks`)
+6. **퀴즈 실제 생성** (`generate_quiz`, 설정된 provider로 실제 LLM 호출, 구조 검증 포함)
+7. 전달 미리보기 — `delivery_mode=discord`일 때만 실제 포맷을 보여주고, `--send`를 줘야만
+   실제 전송. Discord 외 채널은 `--send`를 줘도 항상 CLI 미리보기로만 처리(안전장치)
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
-
-from dotenv import load_dotenv
-load_dotenv()
-
-import httpx
-
-
-def check(name, fn):
-    try:
-        fn()
-        print(f"[OK]   {name}")
-        return True
-    except Exception as e:
-        print(f"[FAIL] {name}: {e}")
-        return False
-
-
-def check_env_vars():
-    required = ["OUTLINE_API_URL", "OUTLINE_API_KEY", "OUTLINE_ROOT_COLLECTION_ID", "ANTHROPIC_API_KEY"]
-    missing = [k for k in required if not os.environ.get(k)]
-    if missing:
-        raise RuntimeError(f"누락된 환경변수: {missing}")
-
-
-def check_python_version():
-    if sys.version_info < (3, 10):
-        raise RuntimeError(f"Python 3.10+ 필요, 현재 {sys.version}")
-
-
-def check_outline_auth():
-    """Outline auth.info — 데이터를 건드리지 않고 API 키 유효성만 확인."""
-    url = os.environ["OUTLINE_API_URL"].rstrip("/")
-    key = os.environ["OUTLINE_API_KEY"]
-    resp = httpx.post(
-        f"{url}/auth.info",
-        headers={"Authorization": f"Bearer {key}"},
-        timeout=15.0,
-    )
-    resp.raise_for_status()
-    data = resp.json().get("data", {})
-    print(f"       -> 인증된 사용자: {data.get('user', {}).get('name', '?')} / "
-          f"팀: {data.get('team', {}).get('name', '?')}")
-
-
-def check_root_collection_accessible():
-    """documents.list를 딱 1페이지(limit=1)만 호출 — 전체 순회 없이 접근 가능 여부만 확인."""
-    url = os.environ["OUTLINE_API_URL"].rstrip("/")
-    key = os.environ["OUTLINE_API_KEY"]
-    collection_id = os.environ["OUTLINE_ROOT_COLLECTION_ID"]
-    resp = httpx.post(
-        f"{url}/documents.list",
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        json={"collectionId": collection_id, "offset": 0, "limit": 1},
-        timeout=15.0,
-    )
-    resp.raise_for_status()
-    data = resp.json().get("data", [])
-    print(f"       -> 루트 컬렉션에서 문서 {len(data)}건 확인 (limit=1 샘플)")
-
-
-def check_anthropic_auth():
-    """max_tokens=10짜리 최소 호출로 키 유효성만 확인 (전체 퀴즈 생성 아님, 비용 무시 가능 수준)."""
-    from anthropic import Anthropic
-    client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-    resp = client.messages.create(
-        model=os.environ.get("QUIZ_MODEL", "claude-haiku-4-5"),
-        max_tokens=10,
-        messages=[{"role": "user", "content": "ping"}],
-    )
-    print(f"       -> Claude 응답 수신 확인 (model={resp.model})")
-
-
-if __name__ == "__main__":
-    results = [
-        check("환경변수 존재 확인", check_env_vars),
-        check("Python 버전 확인", check_python_version),
-        check("Outline API 키 유효성 (auth.info)", check_outline_auth),
-        check("루트 컬렉션 접근 가능 여부 (documents.list, limit=1)", check_root_collection_accessible),
-        check("Anthropic API 키 유효성 (ping)", check_anthropic_auth),
-    ]
-    print()
-    if all(results):
-        print("모든 스모크 테스트 통과. 아래 4단계(실제 첫 실행)로 진행 가능.")
-        sys.exit(0)
-    else:
-        print("일부 항목 실패. 아래 5번 체크리스트 표에서 해당 실패 원인을 확인할 것.")
-        sys.exit(1)
-```
-
-이 스크립트가 확인하지 않는 것(의도적으로 제외 — 아래 4번, 5번에서 사람이 직접 확인):
-전체 문서 트리 순회, 첨부파일 다운로드, 퀴즈 3문제 실제 생성, Slack/Email 실제 발송.
-이 부분들은 되돌리기 어렵거나(실발송), 프로덕션 레이트리밋에 영향을 주거나(전체 크롤링),
-육안 판단이 필요해서(품질) 스모크 테스트 범위에서 뺐다.
+크롤링/퀴즈 생성까지 실제로 호출한다는 점에서 예전 "auth ping 수준" 스모크 테스트보다
+깊게 검증하지만, 안전 경계선은 그대로 유지한다: 크롤링 대상은 `config.py`가 코드 레벨로
+고정한 단일 문서뿐이고(컬렉션 전체 순회 경로 자체가 없음), Discord 외 채널로의 실제 발송은
+이 스크립트로는 절대 일어나지 않는다. 육안 품질 검수(hallucination, 한국어 PDF 깨짐 등)는
+여전히 사람 몫 — 아래 5번 표 참고.
 
 ---
 
@@ -242,3 +163,27 @@ if __name__ == "__main__":
 **남은 절차**: 사람이 `.env`에 실제 키를 채운 뒤 본인 터미널에서
 `python3 tests/e2e_smoke_test.py`를 실행해 4~6번 항목(Outline 인증, 컬렉션 접근,
 Anthropic 인증)을 확인하고, 통과하면 4장 "실제 첫 실행 절차"로 진행한다.
+
+---
+
+## 8. 이번 세션 재검증 결과 (2026-09-25)
+
+`tests/e2e_smoke_test.py`가 두 번 따로 바뀌는 일이 있었다: ① 2026-09-05 설정 변경
+(`OUTLINE_DOCUMENT_ID` 단일 문서 고정 + Gemini 기본값) 이후에도 이 스크립트는 옛
+`OUTLINE_ROOT_COLLECTION_ID`/`ANTHROPIC_API_KEY` 기준으로 남아있었고, ② 그걸 고치는
+과정에서 병렬로 열려있던 다른 세션이 거의 동시에 "실제 크롤링·퀴즈 생성까지 구동하는"
+훨씬 깊은 버전으로 스크립트를 전면 교체(커밋 `fd4cb62`)했다. 이번 세션에서 그 버전과,
+같은 목적으로 별도로 작성했던 스크립트를 하나로 병합해 `tests/e2e_smoke_test.py` 한
+파일로 정리했다(8단계: Python 버전 → config 로드 → Outline 인증 → 실제 크롤링 →
+첨부파일 파싱 → 샘플링 → 퀴즈 실제 생성 → 전달 미리보기/Discord 한정 실전송).
+
+- **pytest 전체 스위트**: **25/25 통과** (`test_config.py` 추가로 이전 21개보다 늘어남)
+- **`tests/e2e_smoke_test.py`(병합판) dry-run**: `.env` 없는 상태로 실행 → 0단계(Python
+  버전) 통과 후 1단계(config 로드)에서 `OUTLINE_DOCUMENT_ID`/`OUTLINE_ROOT_COLLECTION_ID`
+  둘 다 없다는 `KeyError`로 깔끔하게 멈춤 — 실제 키 없이 여기서 막히는 것이 정상 동작
+- 본문 3번 섹션에 스크립트 전체를 복사해두던 방식을 걷어내고 파일 링크만 남김 — 앞으로
+  코드와 문서가 또 따로 갈라지는 것을 구조적으로 방지
+
+**남은 절차는 위와 동일**: 사람이 `.env`를 채운 뒤 본인 터미널에서 실행해 2~7단계
+(Outline 인증부터 퀴즈 실제 생성, 전달 미리보기)까지 실제로 확인해야 한다. 통과 후
+`--send`까지 돌리면 Discord 실전송(4장 4번 항목)도 이 스크립트 하나로 끝낼 수 있다.
