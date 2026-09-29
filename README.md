@@ -132,9 +132,13 @@ wiki-quiz/
 
 - `OUTLINE_API_URL` — 인스턴스 API 베이스 URL (예: `https://wiki.class.day/api`)
 - `OUTLINE_API_KEY` — Outline API 키 (Settings → API Keys에서 발급, 대상 위키 접근 권한 필요)
-- `OUTLINE_ROOT_COLLECTION_ID` — 순회를 시작할 루트 컬렉션 ID (컬렉션 전체를 순회)
-- `OUTLINE_DOCUMENT_ID` — 설정하면 컬렉션 전체 대신 이 문서(+하위 트리)만 순회.
-  둘 중 하나는 필수이며, 둘 다 설정 시 `OUTLINE_DOCUMENT_ID`가 우선한다.
+- `OUTLINE_DOCUMENT_ID` — 이 문서(+하위 트리)만 순회. **필수**이며, `config.py`의
+  `_ALLOWED_OUTLINE_DOCUMENT_ID`와 정확히 일치하는 값만 허용된다(다른 값이면 즉시
+  실패). 이 위키에는 지정된 문서 하나 외에 민감 정보가 있어, 대상을 실수로 넓히지
+  못하도록 코드 레벨로 고정해뒀다.
+  - `OUTLINE_ROOT_COLLECTION_ID`(컬렉션 전체 순회)는 같은 이유로 이 저장소에서
+    **완전히 비활성화**되어 있다 — 값을 넣어도 `config.py`가 즉시 `ValueError`를
+    던진다. 정말 필요하면 `config.py`의 검증 로직을 의도적으로 풀어야 한다.
 - `QUIZ_PROVIDER` — `gemini`(기본값, 무료 티어) / `claude`(유료 종량제)
 - `GEMINI_API_KEY` — Gemini API 키 (https://aistudio.google.com 에서 발급, `QUIZ_PROVIDER=gemini`일 때 필수)
 - `ANTHROPIC_API_KEY` — Claude API 키 (`QUIZ_PROVIDER=claude`일 때 필수. Claude.ai 구독과는
@@ -230,19 +234,21 @@ GitHub Actions (cron, 매일 UTC 0시)
 └─────────────────────────────────────────────────────────────────┘
   │
   │ ① cfg = load_config()               [config.py]
-  │    환경변수 OUTLINE_API_URL / OUTLINE_API_KEY /
-  │    OUTLINE_DOCUMENT_ID(또는 OUTLINE_ROOT_COLLECTION_ID) /
-  │    GEMINI_API_KEY(또는 ANTHROPIC_API_KEY) 등을 읽어 Config 객체로 모음
+  │    환경변수 OUTLINE_API_URL / OUTLINE_API_KEY / OUTLINE_DOCUMENT_ID /
+  │    GEMINI_API_KEY(또는 ANTHROPIC_API_KEY) 등을 읽어 Config 객체로 모음.
+  │    OUTLINE_DOCUMENT_ID가 코드에 고정된 허용값과 다르면 여기서 즉시 실패
+  │    (민감 문서 노출 방지, "설정" 섹션 참고)
   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │ ② OutlineWikiCrawler                  [outline_client.py]        │
 │                                                                    │
-│   OUTLINE_DOCUMENT_ID 있음?                                       │
-│     예 → collect_document_tree(document_id)                      │
-│           documents.info(문서 하나 조회)                          │
-│              └→ documents.list(그 문서의 자식들, 재귀)            │
-│     아니오 → collect_all_documents(root_collection_id)           │
-│           documents.list(컬렉션 최상위) → 재귀로 트리 전체 순회   │
+│   collect_document_tree(document_id)                             │
+│     documents.info(문서 하나 조회)                                │
+│        └→ documents.list(그 문서의 자식들, 재귀)                  │
+│                                                                    │
+│   (collect_all_documents/컬렉션 전체 순회 메서드도 코드에는 있지만,│
+│    config.py가 OUTLINE_ROOT_COLLECTION_ID를 완전히 거부하므로     │
+│    이 저장소에서는 실행 경로에 들어오지 않음)                     │
 │                                                                    │
 │   요청마다 헤더: Authorization: Bearer {OUTLINE_API_KEY}          │
 │   응답: WikiDocument(문서 id, 제목, 본문 markdown, 첨부 링크 목록)│
@@ -296,9 +302,9 @@ GitHub Actions (cron, 매일 UTC 0시)
    (다음 실행까지 이 파이프라인은 어디에도 존재하지 않는다)
 ```
 
-핵심은 ②에서 "컬렉션 전체를 훑을지, 문서 하나(+하위 트리)만 훑을지"가
-`OUTLINE_DOCUMENT_ID` 유무로 갈린다는 점이다. 이후 ③~⑥ 단계는 입력 문서 개수가
-1개든 100개든 완전히 동일한 코드 경로를 탄다.
+핵심은 ②에서 순회 범위가 `OUTLINE_DOCUMENT_ID` 하나(+하위 트리)로 고정되어 있다는
+점이다(컬렉션 전체 순회는 config.py가 원천 차단). ③~⑥ 단계는 입력 문서 개수가
+1개든 여러 개든 완전히 동일한 코드 경로를 탄다.
 
 ## GitHub Secrets는 실제로 어떻게, 어디까지 안전한가
 
