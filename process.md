@@ -6,7 +6,7 @@
 > (실연동 전 체크리스트), `SECURITY_AND_COST_AUDIT.md`(보안·비용 전수조사, gitignore됨,
 > 로컬 전용)를 참고.
 
-마지막 갱신: 2026-09-25 · 커밋 `28f3ff6` 기준
+마지막 갱신: 2026-09-30 · 커밋 `8916068` 기준
 
 ---
 
@@ -32,12 +32,19 @@ Outline 위키 문서를 매일 순회해서 무작위로 뽑은 내용으로 Cl
 끝내서 "파이프라인이 실제로 도는가"부터 확인하고, D는 급하지 않으니 그다음에.
 
 ### A. 로컬에서 전체 파이프라인 검증
-- [ ] A-1. `cp .env.example .env` 후 실제 키 채우기 (`OUTLINE_API_URL`,
-  `OUTLINE_API_KEY`, `OUTLINE_DOCUMENT_ID=mOuXpLufUA`, `GEMINI_API_KEY`,
-  `DELIVERY_MODE=discord`, `DISCORD_WEBHOOK_URL`)
-- [ ] A-2. `pip install -r requirements.txt`
-- [ ] A-3. `python3 tests/e2e_smoke_test.py` — 0~7단계 전부 `[OK]`인지 확인
-      (`[FAIL]` 뜨면 그 메시지 그대로 공유)
+- [x] A-1-a. `.env` 파일 생성 + 비밀값 아닌 항목 채우기(`OUTLINE_DOCUMENT_ID=mOuXpLufUA`,
+  `DELIVERY_MODE=discord`)는 AI가 완료(2026-09-30) — 이 값들은 이미 대화에 공개된 값이라
+  AI가 직접 채울 수 있었음
+- [ ] **A-1-b. 실제 비밀값 채우기 (사람만 가능)**: `OUTLINE_API_KEY`, `GEMINI_API_KEY`,
+  `DISCORD_WEBHOOK_URL` — AI는 이 값들을 받은 적이 없어 채울 수 없음. `.env` 파일을
+  열어서 이 3개만 채우면 됨(다른 항목은 이미 채워져 있음)
+- [x] A-2. `pip install -r requirements.txt` — AI가 완료(2026-09-30), 8개 패키지 정상 설치 확인
+- [x] A-3-예비검증. AI가 플레이스홀더 키로 먼저 실행해봄 — 0단계(Python 버전)/1단계
+  (config 로드, 문서 ID 보안 고정 포함) 정상 통과, 2단계(Outline 인증)에서 가짜 키로
+  인한 401까지 깔끔하게 도달 확인(2026-09-30). **이 과정에서 `.env.example` 버그를
+  발견해 수정함**(커밋 `8916068` — 인라인 주석이 값으로 잘못 파싱되던 문제)
+- [ ] **A-3. 진짜 실행 (사람만 가능)**: A-1-b 채운 뒤 `python3 tests/e2e_smoke_test.py`
+  재실행 — 0~7단계 전부 `[OK]`인지 확인 (`[FAIL]` 뜨면 그 메시지 그대로 공유)
 - [ ] A-4. 통과하면 `python3 tests/e2e_smoke_test.py --send`로 Discord에 실제 1회 전송,
       채널에서 도착 확인
 
@@ -94,6 +101,8 @@ Outline 관리자 화면이 어떻게 생겼는지 몰라서, D 시작할 때 �
 | 2026-09-25 | `efe5521` | `wiki_quiz/retry.py` 신설 — delivery 5개 모듈(outline_document/slack/discord/google_chat/email)에 429/일시 오류 재시도 로직 추가, `outline_client.py`의 기존 재시도 로직도 여기로 통합 |
 | 2026-09-25 | `6ec688e` | `daily_quiz.yml`에 파이프라인 실패 시 Discord 알림 스텝(`if: failure()`) 추가 |
 | 2026-09-25 | `b9433e2` | `test_main.py` 신설(오케스트레이션 배선 검증), `test_config.py` 확장(provider/delivery_mode 기본값). pytest 21개 → 56개 |
+| 2026-09-25 | `4551cbe` | 배포 검증(A~C)과 Outline 권한 잠그기(D)를 process.md "지금 해야 할 순서" 섹션 하나로 통합 |
+| 2026-09-30 | `8916068` | **버그 수정**: `.env.example`의 `KEY=   # 설명` 형태 줄에서 인라인 주석이 python-dotenv에 값으로 잘못 파싱되던 문제 발견·수정(`OUTLINE_ROOT_COLLECTION_ID`/`OUTLINE_DOCUMENT_ID`/`QUIZ_MODEL` 해당). `cp .env.example .env` 직후 바로 쓰면 `OUTLINE_ROOT_COLLECTION_ID`가 비의도적으로 채워져 즉시 에러 나던 것 — `tests/e2e_smoke_test.py`를 실제로 로컬에서 돌려보다가 발견함. 수정 후 0~1단계(Python 버전, config 로드)는 정상 통과, 2단계(Outline 인증)에서 플레이스홀더 키로 인한 401까지 깔끔하게 도달 확인 |
 
 **GitHub 설정(코드 밖, Secrets/Variables) 진행 상황:**
 - ✅ `OUTLINE_API_URL` (Variable), `OUTLINE_API_KEY` / `OUTLINE_DOCUMENT_ID` / `GEMINI_API_KEY` (Secrets) 등록 확인됨
