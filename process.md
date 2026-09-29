@@ -49,15 +49,23 @@ Outline 위키 문서를 매일 순회해서 무작위로 뽑은 내용으로 Cl
       채널에서 도착 확인
 
 ### B. GitHub Secrets/Variables 등록 확인
-- [ ] B-1. Settings → Secrets and variables → Actions → **Secrets** 탭에서
-      `DISCORD_WEBHOOK_URL` 존재 확인 (없으면 등록)
-- [ ] B-2. **Variables** 탭에서 `DELIVERY_MODE` = `discord` 확인 (없으면 등록)
+- [x] B-1. `DISCORD_WEBHOOK_URL` Secret 등록 완료(2026-09-30, 스크린샷 확인)
+- [x] B-2. `DELIVERY_MODE=discord` Variable 등록 완료(2026-09-30, 스크린샷 확인)
 
 ### C. GitHub Actions 실전 확인
-- [ ] C-1. Actions 탭 → Daily Wiki Quiz → **Run workflow** 수동 실행
-- [ ] C-2. 로그에서 성공(초록 체크) 확인 — 실패하면 에러 로그 공유
-- [ ] C-3. Discord 채널에 실제 퀴즈 도착 확인
-      → 여기까지 되면 **파이프라인 첫 완전 성공** 기록
+- [x] C-1. Actions 탭 → Daily Wiki Quiz → **Run workflow** 수동 실행 완료(2026-09-30)
+- [x] C-2. 워크플로 성공 (사용자 확인)
+- [x] C-3. Discord `#일반` 채널에 "wiki_quiz" 앱 명의로 "오늘의 위키 퀴즈" 메시지 3문제
+      도착 확인(스크린샷, 2026-09-30 01:54 KST) — 위키 실제 내용(Claude Code/OpenClaw,
+      브라우저 저장소, 실시간 통신 방식) 기반 문제로 확인됨
+
+**🎉 파이프라인 첫 완전 성공 기록: 2026-09-30.** Outline 문서 수집 → Gemini 퀴즈 생성
+→ Discord 전달까지 전 구간이 실제 자격증명으로 처음 끝까지 성공. 단, 이 실행은
+수동(`Run workflow`)이었고 cron(매일 KST 09:00) 자동 실행 성공은 아직 별도 확인 필요.
+
+**⚠️ 확인 필요**: 캡처에서 정답이 스포일러(클릭 전 가림) 없이 바로 평문으로 보임 —
+discord.py의 `||정답: ...||` 스포일러 태그가 의도대로 렌더링되는지 검증 필요
+(사용자가 이미 클릭해서 열어본 상태였을 가능성도 있어 원인 미확정, 확인 중).
 
 ### D. Outline 권한 진짜 100% 잠그기 (급하지 않음, 여유될 때)
 코드(`config.py`의 `_ALLOWED_OUTLINE_DOCUMENT_ID`)는 "우리 코드가 실수로 다른 문서를
