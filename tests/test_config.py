@@ -147,3 +147,19 @@ def test_smtp_port_is_none_when_unset(monkeypatch):
     cfg = config.load_config()
 
     assert cfg.smtp_port is None
+
+
+# ── SAMPLE_CHUNK_COUNT / QUESTION_COUNT 값 검증 ─────────────────────────
+
+def test_zero_sample_chunk_count_is_rejected(monkeypatch):
+    _set_required_env(monkeypatch, OUTLINE_DOCUMENT_ID="mOuXpLufUA", SAMPLE_CHUNK_COUNT="0")
+
+    with pytest.raises(ValueError, match="SAMPLE_CHUNK_COUNT"):
+        config.load_config()
+
+
+def test_negative_question_count_is_rejected(monkeypatch):
+    _set_required_env(monkeypatch, OUTLINE_DOCUMENT_ID="mOuXpLufUA", QUESTION_COUNT="-1")
+
+    with pytest.raises(ValueError, match="QUESTION_COUNT"):
+        config.load_config()

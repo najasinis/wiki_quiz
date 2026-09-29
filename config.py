@@ -84,6 +84,13 @@ def load_config() -> Config:
     if quiz_provider == "gemini" and not gemini_api_key:
         raise KeyError("QUIZ_PROVIDER=gemini 인데 GEMINI_API_KEY가 설정되지 않았습니다.")
 
+    sample_chunk_count = int(os.environ.get("SAMPLE_CHUNK_COUNT", "15"))
+    question_count = int(os.environ.get("QUESTION_COUNT", "3"))
+    if sample_chunk_count <= 0:
+        raise ValueError(f"SAMPLE_CHUNK_COUNT는 1 이상이어야 합니다 (현재: {sample_chunk_count}).")
+    if question_count <= 0:
+        raise ValueError(f"QUESTION_COUNT는 1 이상이어야 합니다 (현재: {question_count}).")
+
     return Config(
         outline_api_url=os.environ["OUTLINE_API_URL"],
         outline_api_key=os.environ["OUTLINE_API_KEY"],
@@ -95,8 +102,8 @@ def load_config() -> Config:
         quiz_model=os.environ.get("QUIZ_MODEL") or (
             "gemini-3.5-flash-lite" if quiz_provider == "gemini" else "claude-haiku-4-5"
         ),
-        sample_chunk_count=int(os.environ.get("SAMPLE_CHUNK_COUNT", "15")),
-        question_count=int(os.environ.get("QUESTION_COUNT", "3")),
+        sample_chunk_count=sample_chunk_count,
+        question_count=question_count,
         # QUIZ_PROVIDER와 같은 이유로 `or` 사용 — vars.DELIVERY_MODE 미설정 시 빈 문자열이
         # 주입되면 os.environ.get(key, default)는 기본값을 적용하지 않는다.
         delivery_mode=os.environ.get("DELIVERY_MODE") or "cli",
