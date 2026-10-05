@@ -1,7 +1,7 @@
 """
 5단계: 결과 전달
 
-DELIVERY_MODE 설정값에 따라 outline / slack / discord / google_chat / email / cli
+DELIVERY_MODE 설정값에 따라 outline / slack / discord / discord_file / google_chat / email / cli
 중 하나로 라우팅.
 """
 
@@ -29,6 +29,9 @@ def deliver(mode: str, questions: list[QuizQuestion], config) -> None:
     elif mode == "discord":
         from wiki_quiz.delivery import discord
         discord.deliver(questions, config)
+    elif mode == "discord_file":
+        from wiki_quiz.delivery import discord_file
+        discord_file.deliver(questions, config)
     elif mode == "google_chat":
         from wiki_quiz.delivery import google_chat
         google_chat.deliver(questions, config)

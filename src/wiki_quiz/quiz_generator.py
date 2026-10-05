@@ -24,6 +24,8 @@ from wiki_quiz.sampler import TextChunk
 QUIZ_SYSTEM_PROMPT = """\
 너는 개발 위키 내용을 바탕으로 퀴즈를 출제하는 어시스턴트다.
 주어진 텍스트 조각들만 근거로 사용하고, 조각에 없는 내용은 지어내지 마라.
+먼저 조각에서 핵심 개념 2~3개를 골라 학습용으로 쉽게 설명(개념 설명)하고,
+그 개념을 바탕으로 퀴즈를 출제한다.
 """
 
 _SUBMIT_QUIZ_TOOL_NAME = "submit_quiz"
@@ -33,6 +35,20 @@ _SUBMIT_QUIZ_TOOL_NAME = "submit_quiz"
 _QUIZ_INPUT_SCHEMA = {
     "type": "object",
     "properties": {
+        "concepts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "개념 이름 (짧게)"},
+                    "explanation": {
+                        "type": "string",
+                        "description": "개념 설명 2~4문장. 조각에 있는 내용만 사용",
+                    },
+                },
+                "required": ["title", "explanation"],
+            },
+        },
         "questions": {
             "type": "array",
             "items": {
@@ -59,8 +75,26 @@ _QUIZ_INPUT_SCHEMA = {
             },
         }
     },
-    "required": ["questions"],
+    "required": ["concepts", "questions"],
 }
+
+
+@dataclass
+class Concept:
+    title: str
+    explanation: str
+
+
+class QuizSet(list):
+    """list[QuizQuestion] 그대로 쓰되, 퀴즈의 바탕이 된 개념 설명(concepts)을 함께 들고 다닌다.
+
+    deliver()/기존 delivery 모듈들의 시그니처를 바꾸지 않으려고 list 서브클래스로 만들었다.
+    개념 설명을 쓰는 delivery(discord)만 `getattr(questions, "concepts", [])`로 꺼내 쓴다.
+    """
+
+    def __init__(self, questions=(), concepts=()):
+        super().__init__(questions)
+        self.concepts: list[Concept] = list(concepts)
 
 
 @dataclass
@@ -85,7 +119,7 @@ def generate_quiz(
 
     context = _build_context(chunks)
     user_prompt = (
-        f"{context}\n\n위 조각들에서만 근거를 사용해 {question_count}문제를 "
+        f"{context}\n\n위 조각들에서만 근거를 사용해 개념 설명 2~3개와 {question_count}문제를 "
         f"4지선다로 출제해줘. 반드시 {_SUBMIT_QUIZ_TOOL_NAME} 도구를 호출해서 제출해."
     )
 
@@ -96,7 +130,9 @@ def generate_quiz(
     else:
         raise ValueError(f"지원하지 않는 QUIZ_PROVIDER: {provider!r} (claude 또는 gemini만 가능)")
 
-    return [QuizQuestion(**item) for item in data[:question_count]]
+    questions = [QuizQuestion(**item) for item in data.get("questions", [])[:question_count]]
+    concepts = [Concept(**c) for c in data.get("concepts", [])]
+    return QuizSet(questions, concepts)
 
 
 def _build_context(chunks: list[TextChunk]) -> str:
@@ -105,7 +141,7 @@ def _build_context(chunks: list[TextChunk]) -> str:
 
 # ── Claude (Anthropic) ──────────────────────────────────────────────
 
-def _generate_with_claude(user_prompt: str, model: str, api_key: str) -> list[dict]:
+def _generate_with_claude(user_prompt: str, model: str, api_key: str) -> dict:
     from anthropic import Anthropic
 
     client = Anthropic(api_key=api_key)
@@ -126,7 +162,7 @@ def _generate_with_claude(user_prompt: str, model: str, api_key: str) -> list[di
 
     for block in response.content:
         if getattr(block, "type", None) == "tool_use" and block.name == _SUBMIT_QUIZ_TOOL_NAME:
-            return block.input.get("questions", [])
+            return dict(block.input)
     raise RuntimeError(
         f"Claude 응답에서 '{_SUBMIT_QUIZ_TOOL_NAME}' tool_use 블록을 찾지 못했습니다: {response.content!r}"
     )
@@ -134,7 +170,7 @@ def _generate_with_claude(user_prompt: str, model: str, api_key: str) -> list[di
 
 # ── Gemini (Google) ─────────────────────────────────────────────────
 
-def _generate_with_gemini(user_prompt: str, model: str, api_key: str) -> list[dict]:
+def _generate_with_gemini(user_prompt: str, model: str, api_key: str) -> dict:
     from google import genai
     from google.genai import types
 
@@ -165,7 +201,7 @@ def _generate_with_gemini(user_prompt: str, model: str, api_key: str) -> list[di
 
     for part in response.candidates[0].content.parts:
         if part.function_call and part.function_call.name == _SUBMIT_QUIZ_TOOL_NAME:
-            return dict(part.function_call.args).get("questions", [])
+            return dict(part.function_call.args)
     raise RuntimeError(
         f"Gemini 응답에서 '{_SUBMIT_QUIZ_TOOL_NAME}' function_call을 찾지 못했습니다: {response!r}"
     )

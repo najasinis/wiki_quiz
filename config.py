@@ -49,6 +49,9 @@ class Config:
     smtp_app_password: str | None
     email_to: str | None
 
+    # DELIVERY_MODE=discord_file 일 때 첨부 파일 형식: "html" | "md"
+    discord_file_format: str = "html"
+
 
 def load_config() -> Config:
     # SUDO: 필수 값 누락 시 명시적으로 에러 던지기 (조용히 None으로 두지 않기)
@@ -116,4 +119,5 @@ def load_config() -> Config:
         smtp_user=os.environ.get("SMTP_USER"),
         smtp_app_password=os.environ.get("SMTP_APP_PASSWORD"),
         email_to=os.environ.get("EMAIL_TO"),
+        discord_file_format=os.environ.get("DISCORD_FILE_FORMAT") or "html",
     )
